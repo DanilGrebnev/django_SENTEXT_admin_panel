@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Django administration</title>
+    <style>
+      html,
+      body {
+        box-sizing: border-box;
+      }
+
+      /* ===== Base ===== */
+      .page {
+        font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
+          Helvetica, Arial, sans-serif;
+        line-height: 1.4;
+        color: #ffffff;
+        background: #202020;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+
+      /* ===== Header ===== */
+      .header {
+        background: #205078;
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .header__title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #ffffff;
+      }
+      .header__user {
+        font-size: 14px;
+        color: #ffffff;
+      }
+
+      /* ===== Breadcrumbs ===== */
+      .breadcrumbs {
+        background: #2a2a2a;
+        padding: 8px 20px;
+        color: #ffffff;
+        font-size: 14px;
+      }
+      .breadcrumbs__link {
+        color: #4a90e2;
+        text-decoration: none;
+      }
+
+      /* ===== Layout ===== */
+      .layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        min-height: calc(100vh - 80px);
+      }
+      .layout__sidebar {
+        background: #2a2a2a;
+        padding: 16px 0;
+      }
+      .layout__main {
+        background: #202020;
+        padding: 20px;
+      }
+
+      /* ===== Sidebar ===== */
+      .sidebar__search {
+        padding: 0 16px 16px;
+      }
+      .sidebar__input {
+        width: 100%;
+        padding: 8px 12px;
+        background: #202020;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        color: #ffffff;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+      .sidebar__input::placeholder {
+        color: #9ca3af;
+      }
+
+      .sidebar__section {
+        margin-bottom: 24px;
+      }
+      .sidebar__section-title {
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0 16px 8px;
+        margin: 0;
+      }
+      .sidebar__list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .sidebar__item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        color: #ffffff;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .sidebar__item:hover {
+        background: #404040;
+      }
+      .sidebar__item--active {
+        background: #34708d;
+      }
+      .sidebar__add {
+        color: #4a90e2;
+        text-decoration: none;
+        font-size: 12px;
+      }
+
+      /* ===== Main Content ===== */
+      .main__title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #ffffff;
+        margin: 0 0 20px;
+      }
+
+      .main__search {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .main__search-input {
+        flex: 1;
+        padding: 8px 12px;
+        background: #2a2a2a;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        color: #ffffff;
+        font-size: 14px;
+      }
+      .main__search-btn {
+        padding: 8px 16px;
+        background: #4a90e2;
+        border: none;
+        border-radius: 4px;
+        color: #ffffff;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .main__filters {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .main__filter {
+        color: #ffffff;
+        text-decoration: none;
+        font-size: 14px;
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+      .main__filter--active {
+        background: #4a90e2;
+      }
+
+      .main__actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding: 12px;
+        background: #2a2a2a;
+        border-radius: 4px;
+      }
+      .main__action-label {
+        color: #ffffff;
+        font-size: 14px;
+      }
+      .main__action-select {
+        background: #202020;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        color: #ffffff;
+        padding: 4px 8px;
+        font-size: 14px;
+      }
+      .main__action-btn {
+        padding: 4px 12px;
+        background: #4a90e2;
+        border: none;
+        border-radius: 4px;
+        color: #ffffff;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .main__selection {
+        color: #ffffff;
+        font-size: 14px;
+      }
+
+      /* ===== Table ===== */
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #2a2a2a;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .table__header {
+        background: #404040;
+        color: #ffffff;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+        width: 100%;
+      }
+      .table__header-cell {
+        padding: 12px 16px;
+        text-align: left;
+      }
+      .table__row {
+        border-bottom: 1px solid #404040;
+        transition: background 0.2s;
+      }
+      .table__row:hover {
+        background: #404040;
+      }
+      .table__cell {
+        padding: 12px 16px;
+        color: #ffffff;
+        font-size: 14px;
+      }
+      .table__checkbox {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+      .table__uid {
+        color: #4a90e2;
+        font-family: monospace;
+        font-size: 13px;
+      }
+      .table__email {
+        color: #ffffff;
+      }
+
+      /* ===== Utilities ===== */
+      .u-hidden {
+        display: none;
+      }
+      .u-mb-8 {
+        margin-bottom: 8px;
+      }
+      .u-mb-12 {
+        margin-bottom: 12px;
+      }
+      .u-mb-16 {
+        margin-bottom: 16px;
+      }
+      .u-mb-24 {
+        margin-bottom: 24px;
+      }
+    </style>
+  </head>
+  <body class="page">
+    <div class="header">
+      <div class="header__title">Django administration</div>
+      <div class="header__user">WELCOME, ADMIN@SENTX.AI.</div>
+    </div>
+
+    <div class="breadcrumbs">
+      <a href="#" class="breadcrumbs__link">Home</a> >
+      <a href="#" class="breadcrumbs__link">LLM Integration</a> > Messages
+    </div>
+
+    <div class="layout">
+      <div class="layout__sidebar">
+        <div class="sidebar__search">
+          <input
+            type="text"
+            class="sidebar__input"
+            placeholder="Start typing to filter..."
+          />
+        </div>
+
+        <div class="sidebar__section">
+          <h3 class="sidebar__section-title">
+            Authentication and Authorization
+          </h3>
+          <ul class="sidebar__list">
+            <li class="sidebar__item">
+              <span>Groups</span>
+              <a href="#" class="sidebar__add">+ Add</a>
+            </li>
+            <li class="sidebar__item">
+              <span>Anonymous usage limits</span>
+              <a href="#" class="sidebar__add">+ Add</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar__section">
+          <h3 class="sidebar__section-title">LLM Integration</h3>
+          <ul class="sidebar__list">
+            <li class="sidebar__item sidebar__item--active">
+              <span>Messages</span>
+              <a href="#" class="sidebar__add">+ Add</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar__section">
+          <h3 class="sidebar__section-title">Payments</h3>
+          <ul class="sidebar__list">
+            <li class="sidebar__item">
+              <span>Billing plans</span>
+              <a href="#" class="sidebar__add">+ Add</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar__section">
+          <h3 class="sidebar__section-title">Python Social Auth</h3>
+          <ul class="sidebar__list">
+            <li class="sidebar__item">
+              <span>Users</span>
+              <a href="#" class="sidebar__add">+ Add</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="layout__main">
+        <h1 class="main__title">Select message to change</h1>
+
+        <div class="main__search">
+          <input type="text" class="main__search-input" placeholder="Search" />
+          <button class="main__search-btn">Search</button>
+        </div>
+
+        <div class="main__filters">
+          <a href="#" class="main__filter main__filter--active">All dates</a>
+          <a href="#" class="main__filter">May 2025</a>
+          <a href="#" class="main__filter">June 2025</a>
+          <a href="#" class="main__filter">July 2025</a>
+          <a href="#" class="main__filter">August 2025</a>
+          <a href="#" class="main__filter">September 2025</a>
+        </div>
+
+        <div class="main__actions">
+          <span class="main__action-label">Action:</span>
+          <select class="main__action-select">
+            <option>-------</option>
+          </select>
+          <button class="main__action-btn">Go</button>
+          <span class="main__selection">0 of 51 selected</span>
+        </div>
+
+        <table class="table js-messages-table">
+          <thead class="table__header">
+            <tr>
+              <th class="table__header-cell">UID</th>
+              <th class="table__header-cell">CHAT SESSION</th>
+              <th class="table__header-cell">EMAIL</th>
+            </tr>
+          </thead>
+          <tbody class="js-messages-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      class PageRenderer {
+        constructor(rootElement) {
+          this.root = rootElement || document
+          this.leftContainer = this.root.querySelector(".js-left-list")
+          this.centerContainer = this.root.querySelector(".js-messages-list")
+        }
+
+        renderLeftColumn(items) {
+          if (!this.leftContainer) return
+          this.leftContainer.innerHTML = ""
+          const safeItems = Array.isArray(items) ? items : []
+
+          safeItems.forEach((item) => {
+            const listItem = document.createElement("li")
+            listItem.className = "sidebar__item"
+
+            const span = document.createElement("span")
+            span.textContent = this.#safeText(item && item.title, "Item")
+            listItem.appendChild(span)
+
+            const addLink = document.createElement("a")
+            addLink.href = "#"
+            addLink.className = "sidebar__add"
+            addLink.textContent = "+ Add"
+            listItem.appendChild(addLink)
+
+            this.leftContainer.appendChild(listItem)
+          })
+        }
+
+        renderCenter(items) {
+          if (!this.centerContainer) return
+          this.centerContainer.innerHTML = ""
+          const safeItems = Array.isArray(items) ? items : []
+
+          safeItems.forEach((item) => {
+            const row = document.createElement("tr")
+            row.className = "table__row"
+
+            // Checkbox cell
+            const checkboxCell = document.createElement("td")
+            checkboxCell.className = "table__cell"
+            const checkbox = document.createElement("input")
+            checkbox.type = "checkbox"
+            checkbox.className = "table__checkbox"
+            checkboxCell.appendChild(checkbox)
+            row.appendChild(checkboxCell)
+
+            // UID cell
+            const uidCell = document.createElement("td")
+            uidCell.className = "table__cell"
+            const uidLink = document.createElement("a")
+            uidLink.href = "#"
+            uidLink.className = "table__uid"
+            uidLink.textContent = this.#safeText(
+              item && item.uid,
+              "c7d229bd-26c4-4757-9edb-cbe5f7765ca4"
+            )
+            uidCell.appendChild(uidLink)
+            row.appendChild(uidCell)
+
+            // Chat session cell
+            const sessionCell = document.createElement("td")
+            sessionCell.className = "table__cell"
+            const sessionText = document.createElement("span")
+            sessionText.className = "table__email"
+            sessionText.textContent =
+              this.#safeText(item && item.email, "da000shi@gmail.com") +
+              " - " +
+              this.#safeText(item && item.session, "New chat")
+            sessionCell.appendChild(sessionText)
+            row.appendChild(sessionCell)
+
+            this.centerContainer.appendChild(row)
+          })
+        }
+
+        #safeText(value, fallback) {
+          return typeof value === "string" && value.trim().length
+            ? value
+            : fallback || ""
+        }
+      }
+
+      // Demo usage
+      const renderer = new PageRenderer(document)
+
+      // Render sidebar items
+      renderer.renderLeftColumn([
+        { title: "Groups" },
+        { title: "Anonymous usage limits" },
+        { title: "Messages" },
+        { title: "Billing plans" },
+        { title: "Users" },
+      ])
+
+      // Render messages table
+      renderer.renderCenter([
+        {
+          uid: "c7d229bd-26c4-4757-9edb-cbe5f7765ca4",
+          email: "da000shi@gmail.com",
+          session: "New chat",
+        },
+        {
+          uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          email: "user@example.com",
+          session: "Previous chat",
+        },
+        {
+          uid: "f9e8d7c6-b5a4-3210-9876-543210fedcba",
+          email: "admin@test.com",
+          session: "Support chat",
+        },
+      ])
+    </script>
+  </body>
+</html>
