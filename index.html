@@ -27,6 +27,29 @@
         font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
           Helvetica, Arial, sans-serif;
         line-height: 1.4;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+      }
+
+      /* Сброс браузерных стилей кнопок */
+      button {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+        font: inherit;
+        line-height: inherit;
+        text-align: inherit;
+        outline: none;
+        cursor: pointer;
+      }
+
+      /* Вернём видимость чекбоксов после глобального appearance: none */
+      input[type="checkbox"] {
+        -webkit-appearance: checkbox;
+        -moz-appearance: checkbox;
+        appearance: checkbox;
       }
 
       html,
@@ -170,6 +193,11 @@
         display: flex;
         gap: 8px;
         margin-bottom: 16px;
+      }
+      .main__search-group {
+        flex: 1;
+        display: flex;
+        gap: 8px;
       }
       .main__search-input {
         flex: 1;
@@ -425,8 +453,22 @@
         <h1 class="main__title">Select message to change</h1>
 
         <div class="main__search">
-          <input type="text" class="main__search-input" placeholder="Search" />
-          <button class="main__search-btn">Search</button>
+          <div class="main__search-group">
+            <input
+              type="text"
+              class="main__search-input"
+              placeholder="search chats by title"
+            />
+            <button class="main__search-btn">Search</button>
+          </div>
+          <div class="main__search-group">
+            <input
+              type="text"
+              class="main__search-input"
+              placeholder="search chats by email"
+            />
+            <button class="main__search-btn">Search</button>
+          </div>
         </div>
 
         <div class="main__filters">
@@ -647,13 +689,15 @@
             // UID cell
             const uidCell = document.createElement("td")
             uidCell.className = "table__cell"
-            const uidLink = document.createElement("a")
-            uidLink.href = "#"
+            const uidLink = document.createElement("button")
+            uidLink.type = "button"
             uidLink.className = "table__uid"
-            uidLink.textContent = this.#safeText(
+            const uidValue = this.#safeText(
               item && item.uid,
               "c7d229bd-26c4-4757-9edb-cbe5f7765ca4"
             )
+            uidLink.textContent = uidValue
+            uidLink.dataset.chatid = uidValue
             uidLink.addEventListener("click", (e) => {
               e.preventDefault()
               // Даем возможности внешнему обработчику (строка 1036) сначала установить сообщения
@@ -716,8 +760,12 @@
         #openChatForRow(row, item, messages) {
           if (!row) return
 
-          // Если клик по той же строке с уже открытым чатом — закрыть (toggle)
-          if (this.openChatRow === row || row.querySelector(".js-chat-cell")) {
+          // Если под этой строкой уже вставлен чат — закрыть (toggle)
+          const existingChatRow = row.nextElementSibling
+          if (
+            existingChatRow &&
+            existingChatRow.classList.contains("js-chat-row")
+          ) {
             this.#closeChatForRow(row)
             return
           }
@@ -727,28 +775,13 @@
             this.#closeChatForRow(this.openChatRow)
           }
 
-          const cells = row.querySelectorAll("td")
-          if (cells.length < 4) return
-
-          const sessionCell = cells[2]
-          const emailCell = cells[3]
-
-          if (sessionCell && emailCell) {
-            // Сохраняем тексты, чтобы восстановить при закрытии
-            const sessionTextEl = sessionCell.querySelector("span")
-            const emailTextEl = emailCell.querySelector("span")
-            row.dataset.sessionText = sessionTextEl
-              ? sessionTextEl.textContent
-              : ""
-            row.dataset.emailText = emailTextEl ? emailTextEl.textContent : ""
-
-            row.removeChild(sessionCell)
-            row.removeChild(emailCell)
-          }
-
+          // Создаем отдельную строку под текущей и вставляем окно чата, не удаляя колонки
+          const columnCount = row.children.length
+          const chatRow = document.createElement("tr")
+          chatRow.className = "table__row js-chat-row"
           const chatCell = document.createElement("td")
           chatCell.className = "table__cell js-chat-cell"
-          chatCell.setAttribute("colspan", "2")
+          chatCell.setAttribute("colspan", String(columnCount))
 
           const chatWrapper = document.createElement("div")
           chatWrapper.className = "chat"
@@ -784,7 +817,8 @@
 
           chatWrapper.appendChild(messagesContainer)
           chatCell.appendChild(chatWrapper)
-          row.appendChild(chatCell)
+          chatRow.appendChild(chatCell)
+          row.parentNode.insertBefore(chatRow, row.nextSibling)
 
           this.openChatRow = row
         }
@@ -802,29 +836,10 @@
 
         #closeChatForRow(row) {
           if (!row) return
-          const chatCell = row.querySelector(".js-chat-cell")
-          if (chatCell) {
-            row.removeChild(chatCell)
+          const nextRow = row.nextElementSibling
+          if (nextRow && nextRow.classList.contains("js-chat-row")) {
+            nextRow.parentNode.removeChild(nextRow)
           }
-
-          // Восстановить ячейки CHAT SESSION и EMAIL
-          const restoredSession = document.createElement("td")
-          restoredSession.className = "table__cell"
-          const sessionSpan = document.createElement("span")
-          sessionSpan.className = "table__email"
-          sessionSpan.textContent = row.dataset.sessionText || ""
-          restoredSession.appendChild(sessionSpan)
-
-          const restoredEmail = document.createElement("td")
-          restoredEmail.className = "table__cell"
-          const emailSpan = document.createElement("span")
-          emailSpan.className = "table__email"
-          emailSpan.textContent = row.dataset.emailText || ""
-          restoredEmail.appendChild(emailSpan)
-
-          row.appendChild(restoredSession)
-          row.appendChild(restoredEmail)
-
           if (this.openChatRow === row) {
             this.openChatRow = null
           }
@@ -942,12 +957,14 @@
         loadedMainData: "mainData:loaded",
         loadedSidebarData: "sideBar:loaded",
         renderPagination: "setPaginationData",
+        setChatData: "setChatData",
       }
 
-      // ==== Вешаем обработчики событий ====
+      // ==== Регистрируем обработчик события ====
       dataEmitter.on(ACTIONS.loadedMainData, renderMainData)
       dataEmitter.on(ACTIONS.loadedSidebarData, renderSidebarData)
       dataEmitter.on(ACTIONS.renderPagination, renderPagination)
+      dataEmitter.on(ACTIONS.setChatData, setMessagesData)
 
       // ==== Функции рендера данных с сервера ====
       function renderMainData(data) {
@@ -958,6 +975,9 @@
       }
       function renderPagination(data) {
         renderer.renderPagination(data)
+      }
+      function setMessagesData(data) {
+        renderer.setMessageContent(data)
       }
 
       // Запрашиваем данные с сервера и дёргаем емиттер
@@ -992,10 +1012,12 @@
 
         const { data: pageData, ...navigationData } = data
 
+        // Эмитим событие перерисовки страницы и обновления пагинации
         dataEmitter.emit(ACTIONS.loadedMainData, pageData)
         dataEmitter.emit(ACTIONS.renderPagination, navigationData)
       }
 
+      // Запрос данных для sidebar
       async function fetchSidebarData(page) {
         const sidebarData = [
           {
@@ -1032,7 +1054,19 @@
         dataEmitter.emit(ACTIONS.loadedSidebarData, data)
       }
 
-      // Вешаем обработчики событий на кнопки пагинации
+      // Запрос сообщений для чата
+      async function fetchChatMessages(chatId) {
+        const messagesData = [
+          { role: "user", content: "Здравствуйте!" },
+          { role: "assistant", content: "Добрый день!" },
+          { role: "user", content: "Расскажи что-нибудь" },
+        ]
+
+        // Устанавливаем данные
+        dataEmitter.emit(ACTIONS.setChatData, messagesData)
+      }
+
+      // ВЕШАЕМ ОБРАБОТЧИКИ СОБЫТИЙ
       document.addEventListener("click", (e) => {
         // Обработка нажатия на элемент пагинации
         if (e.target.classList.contains("pagination__item")) {
@@ -1041,16 +1075,14 @@
           return
         }
 
+        // Вызываем подгрузку сообщений для чата
         if (e.target.classList.contains("table__uid")) {
-          renderer.setMessageContent([
-            { role: "user", content: "Здравствуйте!" },
-            { role: "assistant", content: "Добрый день!" },
-            { role: "user", content: "Расскажи что-нибудь" },
-          ])
+          const chatId = e.target.dataset.chatid
+          fetchChatMessages(chatId)
         }
       })
 
-      // Инициализируем данные
+      // Инициализируем данные при загрузкестраницы
       function init() {
         fetchMainData()
         fetchSidebarData()
