@@ -16,6 +16,7 @@
         --body-bg: #121212;
         --darkened-bg: #212121;
         --hairline-color: #404040;
+        --link-fg: #81d4fa;
       }
 
       * {
@@ -164,6 +165,11 @@
         transition: background 0.2s;
         border-bottom: 1px solid var(--hairline-color);
       }
+      .sidebar__item a:first-child {
+        color: var(--link-fg);
+        font-weight: 500;
+        text-align: left;
+      }
       .sidebar__item--active {
         background: var(--selected-row);
       }
@@ -173,7 +179,8 @@
       .sidebar__add {
         color: #4a90e2;
         text-decoration: none;
-        font-size: 12px;
+        font-size: 0.8125rem;
+        line-height: 1rem;
       }
       .sidebar__add::before {
         content: "+";
@@ -510,6 +517,10 @@
     </div>
 
     <script>
+      const GET_FILTERS_URL = ""
+      const GET_CHATS_URL = ""
+      const GET_CHATS_MESSAGES_URL = ""
+
       /**
        * EventEmitter - класс для работы с событиями
        * Позволяет подписываться на события, отписываться и вызывать их
@@ -651,9 +662,13 @@
               const listItem = document.createElement("li")
               listItem.className = "sidebar__item"
 
-              const span = document.createElement("span")
-              span.textContent = this.#safeText(item && item.itemTitle, "Item")
-              listItem.appendChild(span)
+              const titleLink = document.createElement("a")
+              titleLink.href = this.#safeText(item && item.titleLink, "#")
+              titleLink.textContent = this.#safeText(
+                item && item.itemTitle,
+                "Item"
+              )
+              listItem.appendChild(titleLink)
 
               const addLink = document.createElement("a")
               addLink.href = this.#safeText(item && item.addLink, "#")
@@ -982,33 +997,37 @@
 
       // Запрашиваем данные с сервера и дёргаем емиттер
       async function fetchMainData(page = 1) {
-        const mainPageData = {
-          pagesAmount: 29,
-          activePage: page,
-          data: [
-            {
-              uid: "c7d229bd-26c4-4757-9edb-cbe5f7765ca4",
-              email: "da000shi@gmail.com",
-              session: "New chat",
-            },
-            {
-              uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-              email: "user@example.com",
-              session: "Previous chat",
-            },
-            {
-              uid: "f9e8d7c6-b5a4-3210-9876-543210fedcba",
-              email: "admin@test.com",
-              session: "Support chat",
-            },
-          ],
-        }
+        const response = await fetch(GET_CHATS_URL + `?page=${page}`)
+        if (!response.ok) return
+        const data = await response.json()
 
-        const data = await new Promise((resolve) => {
-          setTimeout(() => {
-            resolve(mainPageData)
-          }, 1000)
-        })
+        // const mainPageData = {
+        //   pagesAmount: 29,
+        //   activePage: page,
+        //   data: [
+        //     {
+        //       uid: "c7d229bd-26c4-4757-9edb-cbe5f7765ca4",
+        //       email: "da000shi@gmail.com",
+        //       session: "New chat",
+        //     },
+        //     {
+        //       uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        //       email: "user@example.com",
+        //       session: "Previous chat",
+        //     },
+        //     {
+        //       uid: "f9e8d7c6-b5a4-3210-9876-543210fedcba",
+        //       email: "admin@test.com",
+        //       session: "Support chat",
+        //     },
+        //   ],
+        // }
+
+        // const data = await new Promise((resolve) => {
+        //   setTimeout(() => {
+        //     resolve(mainPageData)
+        //   }, 1000)
+        // })
 
         const { data: pageData, ...navigationData } = data
 
@@ -1019,51 +1038,82 @@
 
       // Запрос данных для sidebar
       async function fetchSidebarData(page) {
+        const response = await fetch(GET_FILTERS_URL)
+
+        if (!response.ok) {
+          console.erro("ошибка получения сайдбара")
+        }
+        const data = await response.json()
+
         const sidebarData = [
           {
             sectionTitle: "Authentication and Authorization",
             list: [
-              { itemTitle: "Groups", addLink: "#" },
-              { itemTitle: "Anonymous usage limits", addLink: "#" },
-              { itemTitle: "Groups", addLink: "#" },
-              { itemTitle: "Anonymous usage limits", addLink: "#" },
-              { itemTitle: "Groups", addLink: "#" },
-              { itemTitle: "Anonymous usage limits", addLink: "#" },
-              { itemTitle: "Groups", addLink: "#" },
+              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+              {
+                itemTitle: "Anonymous usage limits",
+                titleLink: "#",
+                addLink: "#",
+              },
+              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+              {
+                itemTitle: "Anonymous usage limits",
+                titleLink: "#",
+                addLink: "#",
+              },
+              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+              {
+                itemTitle: "Anonymous usage limits",
+                titleLink: "#",
+                addLink: "#",
+              },
+              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
             ],
           },
           {
             sectionTitle: "LLM Integration",
-            list: [{ itemTitle: "Messages", addLink: "#" }],
+            list: [{ itemTitle: "Messages", titleLink: "#", addLink: "#" }],
           },
           {
             sectionTitle: "Payments",
-            list: [{ itemTitle: "Billing plans", addLink: "#" }],
+            list: [
+              { itemTitle: "Billing plans", titleLink: "#", addLink: "#" },
+            ],
           },
           {
             sectionTitle: "Python Social Auth",
-            list: [{ itemTitle: "Users", addLink: "#" }],
+            list: [{ itemTitle: "Users", titleLink: "#", addLink: "#" }],
           },
         ]
-        const data = await new Promise((resolve) => {
-          setTimeout(() => {
-            resolve(sidebarData)
-          }, 1000)
-        })
+
+        // const data = await new Promise((resolve) => {
+        //   setTimeout(() => {
+        //     resolve(sidebarData)
+        //   }, 1000)
+        // })
 
         dataEmitter.emit(ACTIONS.loadedSidebarData, data)
       }
 
       // Запрос сообщений для чата
       async function fetchChatMessages(chatId) {
-        const messagesData = [
-          { role: "user", content: "Здравствуйте!" },
-          { role: "assistant", content: "Добрый день!" },
-          { role: "user", content: "Расскажи что-нибудь" },
-        ]
+        const response = await fetch(
+          GET_CHATS_MESSAGES_URL + `?chatId=${chatId}`
+        )
+
+        if (!response.ok) {
+          console.error("ошибка получения сообщения")
+        }
+        const data = await response.json()
+
+        // const data = [
+        //   { role: "user", content: "Здравствуйте!" },
+        //   { role: "assistant", content: "Добрый день!" },
+        //   { role: "user", content: "Расскажи что-нибудь" },
+        // ]
 
         // Устанавливаем данные
-        dataEmitter.emit(ACTIONS.setChatData, messagesData)
+        dataEmitter.emit(ACTIONS.setChatData, data)
       }
 
       // ВЕШАЕМ ОБРАБОТЧИКИ СОБЫТИЙ
