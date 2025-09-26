@@ -112,3 +112,23 @@
 - `500` - внутренняя ошибка сервера
 
 При ошибках фронтенд логирует в консоль, но продолжает работу.
+
+## 4. GET_BREADCRUMBS_URL - Получение хлебных крошек
+
+**Endpoint:** `GET /api/breadcrumbs/`
+
+**Описание:** Возвращает массив элементов хлебных крошек для верхней панели навигации.
+
+**Parameters:**
+
+- нет
+
+**Response format:**
+
+```json
+[
+  { "text": "Home", "link": "/" },
+  { "text": "LLM Integration", "link": "/admin/llm/" },
+  { "text": "Messages", "link": "/admin/llm/messages/" }
+]
+```

@@ -448,10 +448,7 @@
       <div class="header__title">Django administration</div>
     </div>
 
-    <div class="breadcrumbs">
-      <a href="#" class="breadcrumbs__link">Home</a> >
-      <a href="#" class="breadcrumbs__link">LLM Integration</a> > Messages
-    </div>
+    <div class="breadcrumbs"></div>
 
     <div class="layout">
       <div class="layout__sidebar">
@@ -476,12 +473,6 @@
               class="main__search-input main__search-input--messages"
               placeholder="search chats by messages"
             />
-            <button
-              id="search-messages-btn"
-              class="main__search-btn main__search-btn--messages"
-            >
-              Search
-            </button>
           </div>
           <div class="main__search-group">
             <input
@@ -490,12 +481,7 @@
               class="main__search-input main__search-input--email"
               placeholder="search chats by email"
             />
-            <button
-              id="search-email-btn"
-              class="main__search-btn main__search-btn--email"
-            >
-              Search
-            </button>
+            <button id="search-btn" class="main__search-btn">Search</button>
           </div>
         </div>
 
@@ -541,6 +527,7 @@
       const GET_FILTERS_URL = "/api/filters/"
       const GET_CHATS_URL = "/api/chats/"
       const GET_CHATS_MESSAGES_URL = "/api/chats/messages/"
+      const GET_BREADCRUMBS_URL = "/api/breadcrumbs/"
 
       /**
        * EventEmitter - класс для работы с событиями
@@ -650,6 +637,7 @@
       class PageRenderer {
         constructor() {
           this.root = document
+          this.breadcrumbsContainer = this.root.querySelector(".breadcrumbs")
           this.leftContainer = this.root.querySelector(".js-left-list")
           this.centerContainer = this.root.querySelector(".js-messages-list")
           this.paginationContainer = this.root.querySelector(".js-pagination")
@@ -1032,6 +1020,35 @@
           this.paginationContainer.appendChild(pagination)
         }
 
+        /**
+         * Рендерит хлебные крошки в .breadcrumbs
+         * @param {Array} items - массив объектов [{ text: string, link: string }]
+         */
+        renderBreadcrumbs(items) {
+          if (!this.breadcrumbsContainer) return
+          this.breadcrumbsContainer.innerHTML = ""
+
+          const safeItems = Array.isArray(items) ? items : []
+
+          safeItems.forEach((item, index) => {
+            const a = document.createElement("a")
+            a.href =
+              typeof item?.link === "string" && item.link ? item.link : "#"
+            a.className = "breadcrumbs__link"
+            a.textContent =
+              typeof item?.text === "string" && item.text.trim().length
+                ? item.text
+                : ""
+            this.breadcrumbsContainer.appendChild(a)
+
+            if (index < safeItems.length - 1) {
+              const sep = document.createElement("span")
+              sep.textContent = " > "
+              this.breadcrumbsContainer.appendChild(sep)
+            }
+          })
+        }
+
         #generatePageNumbers(total, current) {
           const pages = []
 
@@ -1092,6 +1109,7 @@
       const ACTIONS = {
         loadedMainData: "mainData:loaded",
         loadedSidebarData: "sideBar:loaded",
+        loadedBreadcrumbs: "breadcrumbs:loaded",
         renderPagination: "setPaginationData",
         setChatData: "setChatData",
         searchByMessage: "searchByMessage",
@@ -1102,6 +1120,7 @@
       // ==== Регистрируем обработчик события ====
       dataEmitter.on(ACTIONS.loadedMainData, renderMainData)
       dataEmitter.on(ACTIONS.loadedSidebarData, renderSidebarData)
+      dataEmitter.on(ACTIONS.loadedBreadcrumbs, renderBreadcrumbs)
       dataEmitter.on(ACTIONS.renderPagination, renderPagination)
       dataEmitter.on(ACTIONS.setChatData, setMessagesData)
       dataEmitter.on(ACTIONS.searchByMessage, searchChatsByMessage)
@@ -1114,6 +1133,9 @@
       }
       function renderSidebarData(data) {
         renderer.renderLeftColumn(data)
+      }
+      function renderBreadcrumbs(data) {
+        renderer.renderBreadcrumbs(data)
       }
       function renderPagination(data) {
         renderer.renderPagination(data)
@@ -1160,7 +1182,7 @@
           if (searchParams.email && searchParams.email.trim()) {
             url += `&email=${encodeURIComponent(searchParams.email.trim())}`
           }
-
+          // console.log({ url })
           const response = await fetch(url, {
             credentials: "include",
           })
@@ -1268,6 +1290,22 @@
         }
       }
 
+      // Запрос хлебных крошек
+      async function fetchBreadcrumbs() {
+        try {
+          const response = await fetch(GET_BREADCRUMBS_URL, {
+            credentials: "include",
+          })
+          if (!response.ok) {
+            throw new Error("Ошибка получения breadcrumbs")
+          }
+          const data = await response.json()
+          dataEmitter.emit(ACTIONS.loadedBreadcrumbs, data)
+        } catch (error) {
+          console.error(error)
+        }
+      }
+
       // Запрос сообщений для чата
       async function fetchChatMessages(chatId) {
         try {
@@ -1315,22 +1353,32 @@
           })
         }
 
-        // Обработка поиска по сообщениям
-        if (e.target.classList.contains("main__search-btn--messages")) {
-          const input = document.getElementById("search-messages-input")
-          const searchValue = input.value.trim()
-          if (!searchValue) return
+        // Обработка поиска одним кликом: собираем оба поля
+        if (e.target.classList.contains("main__search-btn")) {
+          const messageInput = document.getElementById("search-messages-input")
+          const emailInput = document.getElementById("search-email-input")
+          const messageValue = (messageInput?.value || "").trim()
+          const emailValue = (emailInput?.value || "").trim()
 
-          dataEmitter.emit(ACTIONS.searchByMessage, searchValue)
-        }
+          if (messageValue) {
+            currentSearchParams = {
+              ...currentSearchParams,
+              message: messageValue,
+            }
+          } else {
+            delete currentSearchParams.message
+          }
 
-        // Обработка поиска по email
-        if (e.target.classList.contains("main__search-btn--email")) {
-          const input = document.getElementById("search-email-input")
-          const searchValue = input.value.trim()
-          if (!searchValue) return
+          if (emailValue) {
+            currentSearchParams = {
+              ...currentSearchParams,
+              email: emailValue,
+            }
+          } else {
+            delete currentSearchParams.email
+          }
 
-          dataEmitter.emit(ACTIONS.searchByEmail, searchValue)
+          fetchMainData(1, currentSearchParams)
         }
       })
 
@@ -1338,6 +1386,7 @@
       function init() {
         fetchMainData()
         fetchSidebarData()
+        fetchBreadcrumbs()
       }
       // Инициализируем данные
       init()
