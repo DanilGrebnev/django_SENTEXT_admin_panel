@@ -295,6 +295,55 @@
         color: #ffffff;
       }
 
+      /* ===== Chat ===== */
+      .chat {
+        display: grid;
+        grid-template-rows: 1fr;
+        gap: 12px;
+        width: 100%;
+        max-height: 500px;
+        overflow: auto;
+        background: #1a1a1a;
+        border: 1px solid var(--hairline-color);
+        border-radius: 8px;
+        padding: 12px;
+      }
+      .chat__messages {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .chat__message {
+        display: flex;
+        width: 100%;
+      }
+      .chat__message--user {
+        justify-content: flex-end;
+      }
+      .chat__message--assistant {
+        justify-content: flex-start;
+      }
+      .chat__bubble {
+        max-width: 70%;
+        padding: 8px 12px;
+        border-radius: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 14px;
+      }
+      .chat__message--user .chat__bubble {
+        background: #2d5a96;
+        color: #ffffff;
+        border-top-right-radius: 4px;
+      }
+      .chat__message--assistant .chat__bubble {
+        background: #2a2a2a;
+        color: #f0f0f0;
+        border-top-left-radius: 4px;
+      }
+
       /* ===== Pagination ===== */
       .pagination {
         display: flex;
@@ -530,6 +579,8 @@
           this.leftContainer = this.root.querySelector(".js-left-list")
           this.centerContainer = this.root.querySelector(".js-messages-list")
           this.paginationContainer = this.root.querySelector(".js-pagination")
+          this.openChatRow = null
+          this.currentChatMessages = null
         }
 
         renderLeftColumn(sections) {
@@ -603,6 +654,13 @@
               item && item.uid,
               "c7d229bd-26c4-4757-9edb-cbe5f7765ca4"
             )
+            uidLink.addEventListener("click", (e) => {
+              e.preventDefault()
+              // Даем возможности внешнему обработчику (строка 1036) сначала установить сообщения
+              setTimeout(() => {
+                this.#openChatForRow(row, item)
+              })
+            })
             uidCell.appendChild(uidLink)
             row.appendChild(uidCell)
 
@@ -635,6 +693,141 @@
 
           // Add event listener for select all checkbox
           this.#setupSelectAll()
+        }
+
+        // Публичный метод: рендер чата по ID и массиву сообщений
+        // messages: Array<{ role: 'user' | 'assistant', content: string }>
+        chatMessageRender(chatId, messages) {
+          if (!chatId) return
+          const uids = Array.from(this.root.querySelectorAll(".table__uid"))
+          const link = uids.find((el) => el.textContent === String(chatId))
+          if (!link) return
+          const row = link.closest("tr")
+          if (!row) return
+          this.#openChatForRow(row, undefined, messages)
+        }
+
+        // Публичный метод: запомнить сообщения для текущего чата
+        // messages: Array<{ role: 'user' | 'assistant', content: string }>
+        setMessageContent(messages) {
+          this.currentChatMessages = this.#normalizeMessages(messages)
+        }
+
+        #openChatForRow(row, item, messages) {
+          if (!row) return
+
+          // Если клик по той же строке с уже открытым чатом — закрыть (toggle)
+          if (this.openChatRow === row || row.querySelector(".js-chat-cell")) {
+            this.#closeChatForRow(row)
+            return
+          }
+
+          // Закрыть предыдущий открытый чат, если кликнули по другому UID
+          if (this.openChatRow && this.openChatRow !== row) {
+            this.#closeChatForRow(this.openChatRow)
+          }
+
+          const cells = row.querySelectorAll("td")
+          if (cells.length < 4) return
+
+          const sessionCell = cells[2]
+          const emailCell = cells[3]
+
+          if (sessionCell && emailCell) {
+            // Сохраняем тексты, чтобы восстановить при закрытии
+            const sessionTextEl = sessionCell.querySelector("span")
+            const emailTextEl = emailCell.querySelector("span")
+            row.dataset.sessionText = sessionTextEl
+              ? sessionTextEl.textContent
+              : ""
+            row.dataset.emailText = emailTextEl ? emailTextEl.textContent : ""
+
+            row.removeChild(sessionCell)
+            row.removeChild(emailCell)
+          }
+
+          const chatCell = document.createElement("td")
+          chatCell.className = "table__cell js-chat-cell"
+          chatCell.setAttribute("colspan", "2")
+
+          const chatWrapper = document.createElement("div")
+          chatWrapper.className = "chat"
+
+          const messagesContainer = document.createElement("div")
+          messagesContainer.className = "chat__messages"
+
+          // Определяем список сообщений: входные -> сохранённые глобально
+          const stored = this.currentChatMessages
+          const list = Array.isArray(messages)
+            ? this.#normalizeMessages(messages)
+            : Array.isArray(stored) && stored.length
+            ? stored
+            : []
+
+          list.forEach((msg) => {
+            const role = msg && (msg.role === "user" ? "user" : "assistant")
+            const content =
+              typeof msg?.content === "string"
+                ? msg.content
+                : String(msg?.content ?? "")
+
+            const msgRow = document.createElement("div")
+            msgRow.className = `chat__message chat__message--${role}`
+
+            const bubble = document.createElement("div")
+            bubble.className = "chat__bubble"
+            bubble.textContent = content
+
+            msgRow.appendChild(bubble)
+            messagesContainer.appendChild(msgRow)
+          })
+
+          chatWrapper.appendChild(messagesContainer)
+          chatCell.appendChild(chatWrapper)
+          row.appendChild(chatCell)
+
+          this.openChatRow = row
+        }
+
+        #normalizeMessages(messages) {
+          const src = Array.isArray(messages) ? messages : []
+          return src.map((m) => ({
+            role: m && m.role === "user" ? "user" : "assistant",
+            content:
+              typeof m?.content === "string"
+                ? m.content
+                : String(m?.content ?? ""),
+          }))
+        }
+
+        #closeChatForRow(row) {
+          if (!row) return
+          const chatCell = row.querySelector(".js-chat-cell")
+          if (chatCell) {
+            row.removeChild(chatCell)
+          }
+
+          // Восстановить ячейки CHAT SESSION и EMAIL
+          const restoredSession = document.createElement("td")
+          restoredSession.className = "table__cell"
+          const sessionSpan = document.createElement("span")
+          sessionSpan.className = "table__email"
+          sessionSpan.textContent = row.dataset.sessionText || ""
+          restoredSession.appendChild(sessionSpan)
+
+          const restoredEmail = document.createElement("td")
+          restoredEmail.className = "table__cell"
+          const emailSpan = document.createElement("span")
+          emailSpan.className = "table__email"
+          emailSpan.textContent = row.dataset.emailText || ""
+          restoredEmail.appendChild(emailSpan)
+
+          row.appendChild(restoredSession)
+          row.appendChild(restoredEmail)
+
+          if (this.openChatRow === row) {
+            this.openChatRow = null
+          }
         }
 
         #setupSelectAll() {
@@ -751,7 +944,7 @@
         renderPagination: "setPaginationData",
       }
 
-      // ==== Вешаемм обработчики событий ====
+      // ==== Вешаем обработчики событий ====
       dataEmitter.on(ACTIONS.loadedMainData, renderMainData)
       dataEmitter.on(ACTIONS.loadedSidebarData, renderSidebarData)
       dataEmitter.on(ACTIONS.renderPagination, renderPagination)
@@ -839,6 +1032,24 @@
         dataEmitter.emit(ACTIONS.loadedSidebarData, data)
       }
 
+      // Вешаем обработчики событий на кнопки пагинации
+      document.addEventListener("click", (e) => {
+        // Обработка нажатия на элемент пагинации
+        if (e.target.classList.contains("pagination__item")) {
+          const pageNumber = e.target.dataset.page
+          fetchMainData(Number(pageNumber))
+          return
+        }
+
+        if (e.target.classList.contains("table__uid")) {
+          renderer.setMessageContent([
+            { role: "user", content: "Здравствуйте!" },
+            { role: "assistant", content: "Добрый день!" },
+            { role: "user", content: "Расскажи что-нибудь" },
+          ])
+        }
+      })
+
       // Инициализируем данные
       function init() {
         fetchMainData()
@@ -846,14 +1057,6 @@
       }
       // Инициализируем данные
       init()
-
-      // Вешаем обработчики событий на кнопки пагинации
-      document.addEventListener("click", (e) => {
-        if (e.target.classList.contains("pagination__item")) {
-          const pageNumber = e.target.dataset.page
-          fetchMainData(Number(pageNumber))
-        }
-      })
     </script>
   </body>
 </html>
