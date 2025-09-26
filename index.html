@@ -223,6 +223,16 @@
         color: #ffffff;
         font-size: 14px;
         cursor: pointer;
+        transition: all 0.2s;
+        outline: 2px solid transparent;
+      }
+      .main__search-btn:hover {
+        background: #357abd;
+      }
+      .main__search-btn:focus,
+      .main__search-btn:active {
+        outline: 2px solid white;
+        outline-offset: 2px;
       }
 
       .main__filters {
@@ -436,7 +446,6 @@
   <body class="page">
     <div class="header">
       <div class="header__title">Django administration</div>
-      <div class="header__user">WELCOME, ADMIN@SENTX.AI.</div>
     </div>
 
     <div class="breadcrumbs">
@@ -463,18 +472,30 @@
           <div class="main__search-group">
             <input
               type="text"
-              class="main__search-input"
-              placeholder="search chats by title"
+              id="search-messages-input"
+              class="main__search-input main__search-input--messages"
+              placeholder="search chats by messages"
             />
-            <button class="main__search-btn">Search</button>
+            <button
+              id="search-messages-btn"
+              class="main__search-btn main__search-btn--messages"
+            >
+              Search
+            </button>
           </div>
           <div class="main__search-group">
             <input
               type="text"
-              class="main__search-input"
+              id="search-email-input"
+              class="main__search-input main__search-input--email"
               placeholder="search chats by email"
             />
-            <button class="main__search-btn">Search</button>
+            <button
+              id="search-email-btn"
+              class="main__search-btn main__search-btn--email"
+            >
+              Search
+            </button>
           </div>
         </div>
 
@@ -632,8 +653,15 @@
           this.leftContainer = this.root.querySelector(".js-left-list")
           this.centerContainer = this.root.querySelector(".js-messages-list")
           this.paginationContainer = this.root.querySelector(".js-pagination")
+          this.selectAllCheckbox = this.root.querySelector(
+            ".table__checkbox--select-all"
+          )
           this.openChatRow = null
           this.currentChatMessages = null
+          this.selectionElement = this.root.querySelector(".main__selection")
+          this.totalItemsOnPage = 0
+          // Обновим счётчик выбранных/всего при инициализации
+          this.#updateSelectionText()
         }
 
         renderLeftColumn(sections) {
@@ -683,10 +711,11 @@
           })
         }
 
-        renderCenter(items) {
+        renderChatsList(items) {
           if (!this.centerContainer) return
           this.centerContainer.innerHTML = ""
           const safeItems = Array.isArray(items) ? items : []
+          this.totalItemsOnPage = safeItems.length
 
           safeItems.forEach((item) => {
             const row = document.createElement("tr")
@@ -752,6 +781,12 @@
 
           // Add event listener for select all checkbox
           this.#setupSelectAll()
+          // Add listeners for row checkboxes to update selection counter
+          this.#setupRowCheckboxListeners()
+          // Refresh selection text
+          this.#updateSelectionText()
+          // Снимем чекбокс "выбрать всё" при перерисовке
+          if (this.selectAllCheckbox) this.selectAllCheckbox.checked = false
         }
 
         // Публичный метод: рендер чата по ID и массиву сообщений
@@ -874,7 +909,29 @@
               rowCheckboxes.forEach((checkbox) => {
                 checkbox.checked = isChecked
               })
+              this.#updateSelectionText()
             })
+          }
+        }
+
+        #setupRowCheckboxListeners() {
+          const rowCheckboxes = this.root.querySelectorAll(
+            ".table__checkbox--row"
+          )
+          rowCheckboxes.forEach((checkbox) => {
+            checkbox.addEventListener("change", () => {
+              this.#updateSelectionText()
+            })
+          })
+        }
+
+        #updateSelectionText() {
+          const total = this.root.querySelectorAll(".table__row").length
+          const selected = this.root.querySelectorAll(
+            ".table__checkbox--row:checked"
+          ).length
+          if (this.selectionElement) {
+            this.selectionElement.textContent = `selected ${selected} of ${total}`
           }
         }
 
@@ -973,6 +1030,8 @@
         loadedSidebarData: "sideBar:loaded",
         renderPagination: "setPaginationData",
         setChatData: "setChatData",
+        searchByMessage: "searchByMessage",
+        searchByEmail: "searchByEmail",
       }
 
       // ==== Регистрируем обработчик события ====
@@ -980,10 +1039,12 @@
       dataEmitter.on(ACTIONS.loadedSidebarData, renderSidebarData)
       dataEmitter.on(ACTIONS.renderPagination, renderPagination)
       dataEmitter.on(ACTIONS.setChatData, setMessagesData)
+      dataEmitter.on(ACTIONS.searchByMessage, searchChatsByMessage)
+      dataEmitter.on(ACTIONS.searchByEmail, searchChatsByEmail)
 
       // ==== Функции рендера данных с сервера ====
       function renderMainData(data) {
-        renderer.renderCenter(data)
+        renderer.renderChatsList(data)
       }
       function renderSidebarData(data) {
         renderer.renderLeftColumn(data)
@@ -995,9 +1056,30 @@
         renderer.setMessageContent(data)
       }
 
+      function searchChatsByMessage(searchQuery) {
+        fetchMainData(1, { message: searchQuery })
+      }
+
+      function searchChatsByEmail(searchQuery) {
+        fetchMainData(1, { email: searchQuery })
+      }
+
       // Запрашиваем данные с сервера и дёргаем емиттер
-      async function fetchMainData(page = 1) {
-        const response = await fetch(GET_CHATS_URL + `?page=${page}`)
+      async function fetchMainData(page = 1, searchParams = {}) {
+        // console.log(searchParams)
+        let url = GET_CHATS_URL + `?page=${page}`
+
+        // Добавляем параметры поиска если они есть
+        if (searchParams.message) {
+          url += `&message=${encodeURIComponent(searchParams.message)}`
+        }
+        if (searchParams.email) {
+          url += `&email=${encodeURIComponent(searchParams.email)}`
+        }
+
+        const response = await fetch(url, {
+          credentials: "include",
+        })
         if (!response.ok) return
         const data = await response.json()
 
@@ -1031,14 +1113,16 @@
 
         const { data: pageData, ...navigationData } = data
 
-        // Эмитим событие перерисовки страницы и обновления пагинации
+        // Эмитим событиями перерисовки страницы и обновлеем пагинацию
         dataEmitter.emit(ACTIONS.loadedMainData, pageData)
         dataEmitter.emit(ACTIONS.renderPagination, navigationData)
       }
 
       // Запрос данных для sidebar
       async function fetchSidebarData(page) {
-        const response = await fetch(GET_FILTERS_URL)
+        const response = await fetch(GET_FILTERS_URL, {
+          credentials: "include",
+        })
 
         if (!response.ok) {
           console.erro("ошибка получения сайдбара")
@@ -1098,7 +1182,10 @@
       // Запрос сообщений для чата
       async function fetchChatMessages(chatId) {
         const response = await fetch(
-          GET_CHATS_MESSAGES_URL + `?chatId=${chatId}`
+          GET_CHATS_MESSAGES_URL + `?chatId=${chatId}`,
+          {
+            credentials: "include",
+          }
         )
 
         if (!response.ok) {
@@ -1129,6 +1216,24 @@
         if (e.target.classList.contains("table__uid")) {
           const chatId = e.target.dataset.chatid
           fetchChatMessages(chatId)
+        }
+
+        // Обработка поиска по сообщениям
+        if (e.target.classList.contains("main__search-btn--messages")) {
+          const input = document.getElementById("search-messages-input")
+          const searchValue = input.value.trim()
+          if (!searchValue) return
+
+          dataEmitter.emit(ACTIONS.searchByMessage, searchValue)
+        }
+
+        // Обработка поиска по email
+        if (e.target.classList.contains("main__search-btn--email")) {
+          const input = document.getElementById("search-email-input")
+          const searchValue = input.value.trim()
+          if (!searchValue) return
+
+          dataEmitter.emit(ACTIONS.searchByEmail, searchValue)
         }
       })
 
