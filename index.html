@@ -538,9 +538,9 @@
     </div>
 
     <script>
-      const GET_FILTERS_URL = ""
-      const GET_CHATS_URL = ""
-      const GET_CHATS_MESSAGES_URL = ""
+      const GET_FILTERS_URL = "/api/filters/"
+      const GET_CHATS_URL = "/api/chats/"
+      const GET_CHATS_MESSAGES_URL = "/api/chats/messages/"
 
       /**
        * EventEmitter - класс для работы с событиями
@@ -1276,9 +1276,6 @@
         }
         const data = await response.json()
         return data
-        // Устанавливаем данные
-        // dataEmitter.emit(ACTIONS.setChatData, data)
-        // return Promise.resolve()
       }
 
       // ВЕШАЕМ ОБРАБОТЧИКИ СОБЫТИЙ
