@@ -5,47 +5,69 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Django administration</title>
     <style>
-      html,
-      body {
-        box-sizing: border-box;
+      :root {
+        --secondary: #417690;
+        --header-bg: var(--secondary);
+        --accent: #f5dd5d;
+        --primary: #264b5d;
+        --breadcrumbs-bg: var(--primary);
+        --primary-fg: #f7f7f7;
+        --selected-row: #00363a;
+        --body-bg: #121212;
+        --darkened-bg: #212121;
+        --hairline-color: #404040;
       }
 
-      /* ===== Base ===== */
-      .page {
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        text-decoration: none;
+        list-style: none;
         font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
           Helvetica, Arial, sans-serif;
         line-height: 1.4;
-        color: #ffffff;
-        background: #202020;
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
       }
 
+      html,
+      body {
+        max-height: 100vh;
+        overflow: auto;
+      }
+
+      .page {
+        color: #ffffff;
+        background: var(--body-bg);
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
       /* ===== Header ===== */
       .header {
-        background: #205078;
-        padding: 12px 20px;
+        background: var(--header-bg);
+        padding: 10px 40px;
         display: flex;
         justify-content: space-between;
         align-items: center;
       }
       .header__title {
-        font-size: 24px;
-        font-weight: 700;
-        color: #ffffff;
+        font-size: 1.5rem;
+        font-weight: 300;
+        color: var(--accent);
       }
       .header__user {
-        font-size: 14px;
-        color: #ffffff;
+        font-size: 1.5rem;
+        font-weight: 300;
+        color: var(--accent);
       }
 
       /* ===== Breadcrumbs ===== */
       .breadcrumbs {
-        background: #2a2a2a;
-        padding: 8px 20px;
+        background: var(--breadcrumbs-bg);
+        padding: 10px 40px;
         color: #ffffff;
-        font-size: 14px;
+        font-size: 0.875rem;
       }
       .breadcrumbs__link {
         color: #4a90e2;
@@ -56,15 +78,20 @@
       .layout {
         display: grid;
         grid-template-columns: 280px 1fr;
-        min-height: calc(100vh - 80px);
+        grid-template-rows: 1fr;
+        overflow: auto;
       }
+
       .layout__sidebar {
-        background: #2a2a2a;
+        background: var(--body-bg);
         padding: 16px 0;
+        overflow: auto;
       }
+
       .layout__main {
-        background: #202020;
+        background: var(--body-bg);
         padding: 20px;
+        overflow: auto;
       }
 
       /* ===== Sidebar ===== */
@@ -89,12 +116,13 @@
         margin-bottom: 24px;
       }
       .sidebar__section-title {
-        color: #ffffff;
+        background: var(--header-bg);
+        color: var(--primary-fg);
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 400;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        padding: 0 16px 8px;
+        padding: 8px;
         margin: 0;
       }
       .sidebar__list {
@@ -111,17 +139,23 @@
         font-size: 14px;
         cursor: pointer;
         transition: background 0.2s;
-      }
-      .sidebar__item:hover {
-        background: #404040;
+        border-bottom: 1px solid var(--hairline-color);
       }
       .sidebar__item--active {
-        background: #34708d;
+        background: var(--selected-row);
+      }
+      .sidebar__item:nth-child(even) {
+        background: var(--darkened-bg);
       }
       .sidebar__add {
         color: #4a90e2;
         text-decoration: none;
         font-size: 12px;
+      }
+      .sidebar__add::before {
+        content: "+";
+        color: #00ff00;
+        margin-right: 4px;
       }
 
       /* ===== Main Content ===== */
@@ -212,12 +246,12 @@
       .table {
         width: 100%;
         border-collapse: collapse;
-        background: #2a2a2a;
+        background: var(--body-bg);
         border-radius: 4px;
         overflow: hidden;
       }
       .table__header {
-        background: #404040;
+        background: var(--darkened-bg);
         color: #ffffff;
         font-weight: 600;
         text-transform: uppercase;
@@ -236,6 +270,9 @@
       .table__row:hover {
         background: #404040;
       }
+      tbody .table__row:nth-child(even) {
+        background: var(--darkened-bg);
+      }
       .table__cell {
         padding: 12px 16px;
         color: #ffffff;
@@ -246,6 +283,9 @@
         height: 16px;
         cursor: pointer;
       }
+      .table__checkbox--select-all {
+        margin: 0;
+      }
       .table__uid {
         color: #4a90e2;
         font-family: monospace;
@@ -253,6 +293,42 @@
       }
       .table__email {
         color: #ffffff;
+      }
+
+      /* ===== Pagination ===== */
+      .pagination {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 16px;
+      }
+      .pagination__item {
+        padding: 2px 6px;
+        background: var(--darkened-bg);
+        color: #ffffff;
+        border: 1px solid var(--hairline-color);
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 0.2s;
+      }
+      .pagination__item:hover {
+        background: #404040;
+      }
+      .pagination__item--active {
+        background: #4a90e2;
+        color: #ffffff;
+      }
+      .pagination__item--disabled {
+        background: var(--body-bg);
+        color: #666;
+        cursor: not-allowed;
+      }
+      .pagination__text {
+        color: #ffffff;
+        font-size: 14px;
+        margin-left: 8px;
       }
 
       /* ===== Utilities ===== */
@@ -293,52 +369,7 @@
             placeholder="Start typing to filter..."
           />
         </div>
-
-        <div class="sidebar__section">
-          <h3 class="sidebar__section-title">
-            Authentication and Authorization
-          </h3>
-          <ul class="sidebar__list">
-            <li class="sidebar__item">
-              <span>Groups</span>
-              <a href="#" class="sidebar__add">+ Add</a>
-            </li>
-            <li class="sidebar__item">
-              <span>Anonymous usage limits</span>
-              <a href="#" class="sidebar__add">+ Add</a>
-            </li>
-          </ul>
-        </div>
-
-        <div class="sidebar__section">
-          <h3 class="sidebar__section-title">LLM Integration</h3>
-          <ul class="sidebar__list">
-            <li class="sidebar__item sidebar__item--active">
-              <span>Messages</span>
-              <a href="#" class="sidebar__add">+ Add</a>
-            </li>
-          </ul>
-        </div>
-
-        <div class="sidebar__section">
-          <h3 class="sidebar__section-title">Payments</h3>
-          <ul class="sidebar__list">
-            <li class="sidebar__item">
-              <span>Billing plans</span>
-              <a href="#" class="sidebar__add">+ Add</a>
-            </li>
-          </ul>
-        </div>
-
-        <div class="sidebar__section">
-          <h3 class="sidebar__section-title">Python Social Auth</h3>
-          <ul class="sidebar__list">
-            <li class="sidebar__item">
-              <span>Users</span>
-              <a href="#" class="sidebar__add">+ Add</a>
-            </li>
-          </ul>
-        </div>
+        <div class="js-left-list"></div>
       </div>
 
       <div class="layout__main">
@@ -370,6 +401,12 @@
         <table class="table js-messages-table">
           <thead class="table__header">
             <tr>
+              <th class="table__header-cell">
+                <input
+                  type="checkbox"
+                  class="table__checkbox table__checkbox--select-all"
+                />
+              </th>
               <th class="table__header-cell">UID</th>
               <th class="table__header-cell">CHAT SESSION</th>
               <th class="table__header-cell">EMAIL</th>
@@ -377,37 +414,164 @@
           </thead>
           <tbody class="js-messages-list"></tbody>
         </table>
+        <div class="js-pagination"></div>
       </div>
     </div>
 
     <script>
-      class PageRenderer {
-        constructor(rootElement) {
-          this.root = rootElement || document
-          this.leftContainer = this.root.querySelector(".js-left-list")
-          this.centerContainer = this.root.querySelector(".js-messages-list")
+      /**
+       * EventEmitter - класс для работы с событиями
+       * Позволяет подписываться на события, отписываться и вызывать их
+       */
+      class EventEmitter {
+        constructor() {
+          this.#events = {}
         }
 
-        renderLeftColumn(items) {
+        // Приватное поле для хранения событий и их обработчиков
+        #events = {}
+
+        /**
+         * Подписаться на событие
+         * @param {string} event - название события
+         * @param {function} callback - функция-обработчик события
+         */
+        on(event, callback) {
+          if (!this.#events[event]) {
+            this.#events[event] = []
+          }
+          this.#events[event].push(callback)
+        }
+
+        /**
+         * Отписаться от события
+         * @param {string} event - название события
+         * @param {function} [callback] - конкретный обработчик для удаления (если не указан, удаляются все)
+         */
+        off(event, callback) {
+          if (!this.#events[event]) return
+
+          if (!callback) {
+            delete this.#events[event]
+            return
+          }
+
+          this.#events[event] = this.#events[event].filter(
+            (cb) => cb !== callback
+          )
+          if (this.#events[event].length === 0) {
+            delete this.#events[event]
+          }
+        }
+
+        /**
+         * Вызвать событие и передать аргументы всем подписчикам
+         * @param {string} event - название события
+         * @param {...any} args - аргументы для передачи обработчикам
+         */
+        emit(event, ...args) {
+          if (!this.#events[event]) return
+
+          this.#events[event].forEach((callback) => {
+            try {
+              callback(...args)
+            } catch (error) {
+              console.error(`Error in event listener for "${event}":`, error)
+            }
+          })
+        }
+
+        /**
+         * Подписаться на событие один раз (автоматически отписывается после первого вызова)
+         * @param {string} event - название события
+         * @param {function} callback - функция-обработчик события
+         */
+        once(event, callback) {
+          const onceWrapper = (...args) => {
+            callback(...args)
+            this.off(event, onceWrapper)
+          }
+          this.on(event, onceWrapper)
+        }
+
+        /**
+         * Получить количество подписчиков на событие
+         * @param {string} event - название события
+         * @returns {number} количество подписчиков
+         */
+        listenerCount(event) {
+          return this.#events[event] ? this.#events[event].length : 0
+        }
+
+        /**
+         * Получить список всех событий, на которые есть подписчики
+         * @returns {string[]} массив названий событий
+         */
+        eventNames() {
+          return Object.keys(this.#events)
+        }
+
+        /**
+         * Удалить всех подписчиков события или всех подписчиков всех событий
+         * @param {string} [event] - название события (если не указано, удаляются все события)
+         */
+        removeAllListeners(event) {
+          if (event) {
+            delete this.#events[event]
+          } else {
+            this.#events = {}
+          }
+        }
+      }
+
+      class PageRenderer {
+        constructor() {
+          this.root = document
+          this.leftContainer = this.root.querySelector(".js-left-list")
+          this.centerContainer = this.root.querySelector(".js-messages-list")
+          this.paginationContainer = this.root.querySelector(".js-pagination")
+        }
+
+        renderLeftColumn(sections) {
           if (!this.leftContainer) return
           this.leftContainer.innerHTML = ""
-          const safeItems = Array.isArray(items) ? items : []
+          const safeSections = Array.isArray(sections) ? sections : []
 
-          safeItems.forEach((item) => {
-            const listItem = document.createElement("li")
-            listItem.className = "sidebar__item"
+          safeSections.forEach((section) => {
+            // Create section title
+            const sectionTitle = document.createElement("h3")
+            sectionTitle.className = "sidebar__section-title"
+            sectionTitle.textContent = this.#safeText(
+              section && section.sectionTitle,
+              "Section"
+            )
+            this.leftContainer.appendChild(sectionTitle)
 
-            const span = document.createElement("span")
-            span.textContent = this.#safeText(item && item.title, "Item")
-            listItem.appendChild(span)
+            // Create section list
+            const sectionList = document.createElement("ul")
+            sectionList.className = "sidebar__list"
 
-            const addLink = document.createElement("a")
-            addLink.href = "#"
-            addLink.className = "sidebar__add"
-            addLink.textContent = "+ Add"
-            listItem.appendChild(addLink)
+            const safeList = Array.isArray(section && section.list)
+              ? section.list
+              : []
+            safeList.forEach((item) => {
+              const listItem = document.createElement("li")
+              listItem.className = "sidebar__item"
 
-            this.leftContainer.appendChild(listItem)
+              const span = document.createElement("span")
+              span.textContent = this.#safeText(item && item.itemTitle, "Item")
+              listItem.appendChild(span)
+
+              const addLink = document.createElement("a")
+              addLink.href = this.#safeText(item && item.addLink, "#")
+              addLink.className = "sidebar__add"
+              addLink.textContent = "Add"
+              listItem.appendChild(addLink)
+
+              sectionList.appendChild(listItem)
+            })
+
+            this.leftContainer.appendChild(sectionList)
           })
         }
 
@@ -425,7 +589,7 @@
             checkboxCell.className = "table__cell"
             const checkbox = document.createElement("input")
             checkbox.type = "checkbox"
-            checkbox.className = "table__checkbox"
+            checkbox.className = "table__checkbox table__checkbox--row"
             checkboxCell.appendChild(checkbox)
             row.appendChild(checkboxCell)
 
@@ -454,8 +618,120 @@
             sessionCell.appendChild(sessionText)
             row.appendChild(sessionCell)
 
+            // Email cell
+            const emailCell = document.createElement("td")
+            emailCell.className = "table__cell"
+            const emailText = document.createElement("span")
+            emailText.className = "table__email"
+            emailText.textContent = this.#safeText(
+              item && item.email,
+              "da000shi@gmail.com"
+            )
+            emailCell.appendChild(emailText)
+            row.appendChild(emailCell)
+
             this.centerContainer.appendChild(row)
           })
+
+          // Add event listener for select all checkbox
+          this.#setupSelectAll()
+        }
+
+        #setupSelectAll() {
+          const selectAllCheckbox = this.root.querySelector(
+            ".table__checkbox--select-all"
+          )
+          const rowCheckboxes = this.root.querySelectorAll(
+            ".table__checkbox--row"
+          )
+
+          if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener("change", () => {
+              const isChecked = selectAllCheckbox.checked
+              rowCheckboxes.forEach((checkbox) => {
+                checkbox.checked = isChecked
+              })
+            })
+          }
+        }
+
+        renderPagination({ pagesAmount, activePage }) {
+          if (!this.paginationContainer) return
+          this.paginationContainer.innerHTML = ""
+
+          const pagination = document.createElement("div")
+          pagination.className = "pagination"
+
+          // Показываем первые страницы, активную и последние
+          const pages = this.#generatePageNumbers(pagesAmount, activePage)
+
+          pages.forEach((page) => {
+            if (page === "...") {
+              const dots = document.createElement("span")
+              dots.className = "pagination__item pagination__item--disabled"
+              dots.textContent = "..."
+              pagination.appendChild(dots)
+            } else {
+              const pageItem = document.createElement("button")
+              pageItem.className = `pagination__item${
+                page === activePage ? " pagination__item--active" : ""
+              }`
+              pageItem.textContent = page
+              pageItem.setAttribute("data-page", page)
+              pagination.appendChild(pageItem)
+            }
+          })
+
+          // Добавляем текст с общим количеством
+          const totalText = document.createElement("span")
+          totalText.className = "pagination__text"
+          totalText.textContent = `${pagesAmount * 25} messages` // Предполагаем 25 сообщений на страницу
+          pagination.appendChild(totalText)
+
+          this.paginationContainer.appendChild(pagination)
+        }
+
+        #generatePageNumbers(total, current) {
+          const pages = []
+
+          if (total <= 9) {
+            // Если страниц мало, показываем все
+            for (let i = 1; i <= total; i++) {
+              pages.push(i)
+            }
+          } else {
+            // Определяем начало окна из 5 страниц
+            let startPage = 1
+
+            // Если активная страница больше 3, сдвигаем окно
+            if (current > 3) {
+              startPage = Math.max(1, current - 2)
+              // Но не дальше чем total - 4, чтобы всегда показать 5 страниц
+              startPage = Math.min(startPage, total - 4)
+            }
+
+            // Показываем 5 страниц начиная с startPage
+            for (let i = startPage; i < startPage + 5; i++) {
+              pages.push(i)
+            }
+
+            // Добавляем троеточие только если есть разрыв
+            if (startPage + 5 < total - 1) {
+              pages.push("...")
+            }
+
+            // Показываем последние 2 страницы только если они не пересекаются с первыми 5
+            if (startPage + 4 < total - 1) {
+              for (let i = total - 1; i <= total; i++) {
+                pages.push(i)
+              }
+            } else if (startPage + 4 < total) {
+              // Если пересекается только с предпоследней, показываем только последнюю
+              pages.push(total)
+            }
+          }
+
+          return pages
         }
 
         #safeText(value, fallback) {
@@ -465,36 +741,119 @@
         }
       }
 
-      // Demo usage
-      const renderer = new PageRenderer(document)
+      const renderer = new PageRenderer()
+      const dataEmitter = new EventEmitter()
 
-      // Render sidebar items
-      renderer.renderLeftColumn([
-        { title: "Groups" },
-        { title: "Anonymous usage limits" },
-        { title: "Messages" },
-        { title: "Billing plans" },
-        { title: "Users" },
-      ])
+      // Объявляем обработчики событий
+      const ACTIONS = {
+        loadedMainData: "mainData:loaded",
+        loadedSidebarData: "sideBar:loaded",
+        renderPagination: "setPaginationData",
+      }
 
-      // Render messages table
-      renderer.renderCenter([
-        {
-          uid: "c7d229bd-26c4-4757-9edb-cbe5f7765ca4",
-          email: "da000shi@gmail.com",
-          session: "New chat",
-        },
-        {
-          uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-          email: "user@example.com",
-          session: "Previous chat",
-        },
-        {
-          uid: "f9e8d7c6-b5a4-3210-9876-543210fedcba",
-          email: "admin@test.com",
-          session: "Support chat",
-        },
-      ])
+      // ==== Вешаемм обработчики событий ====
+      dataEmitter.on(ACTIONS.loadedMainData, renderMainData)
+      dataEmitter.on(ACTIONS.loadedSidebarData, renderSidebarData)
+      dataEmitter.on(ACTIONS.renderPagination, renderPagination)
+
+      // ==== Функции рендера данных с сервера ====
+      function renderMainData(data) {
+        renderer.renderCenter(data)
+      }
+      function renderSidebarData(data) {
+        renderer.renderLeftColumn(data)
+      }
+      function renderPagination(data) {
+        renderer.renderPagination(data)
+      }
+
+      // Запрашиваем данные с сервера и дёргаем емиттер
+      async function fetchMainData(page = 1) {
+        const mainPageData = {
+          pagesAmount: 29,
+          activePage: page,
+          data: [
+            {
+              uid: "c7d229bd-26c4-4757-9edb-cbe5f7765ca4",
+              email: "da000shi@gmail.com",
+              session: "New chat",
+            },
+            {
+              uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              email: "user@example.com",
+              session: "Previous chat",
+            },
+            {
+              uid: "f9e8d7c6-b5a4-3210-9876-543210fedcba",
+              email: "admin@test.com",
+              session: "Support chat",
+            },
+          ],
+        }
+
+        const data = await new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(mainPageData)
+          }, 1000)
+        })
+
+        const { data: pageData, ...navigationData } = data
+
+        dataEmitter.emit(ACTIONS.loadedMainData, pageData)
+        dataEmitter.emit(ACTIONS.renderPagination, navigationData)
+      }
+
+      async function fetchSidebarData(page) {
+        const sidebarData = [
+          {
+            sectionTitle: "Authentication and Authorization",
+            list: [
+              { itemTitle: "Groups", addLink: "#" },
+              { itemTitle: "Anonymous usage limits", addLink: "#" },
+              { itemTitle: "Groups", addLink: "#" },
+              { itemTitle: "Anonymous usage limits", addLink: "#" },
+              { itemTitle: "Groups", addLink: "#" },
+              { itemTitle: "Anonymous usage limits", addLink: "#" },
+              { itemTitle: "Groups", addLink: "#" },
+            ],
+          },
+          {
+            sectionTitle: "LLM Integration",
+            list: [{ itemTitle: "Messages", addLink: "#" }],
+          },
+          {
+            sectionTitle: "Payments",
+            list: [{ itemTitle: "Billing plans", addLink: "#" }],
+          },
+          {
+            sectionTitle: "Python Social Auth",
+            list: [{ itemTitle: "Users", addLink: "#" }],
+          },
+        ]
+        const data = await new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(sidebarData)
+          }, 1000)
+        })
+
+        dataEmitter.emit(ACTIONS.loadedSidebarData, data)
+      }
+
+      // Инициализируем данные
+      function init() {
+        fetchMainData()
+        fetchSidebarData()
+      }
+      // Инициализируем данные
+      init()
+
+      // Вешаем обработчики событий на кнопки пагинации
+      document.addEventListener("click", (e) => {
+        if (e.target.classList.contains("pagination__item")) {
+          const pageNumber = e.target.dataset.page
+          fetchMainData(Number(pageNumber))
+        }
+      })
     </script>
   </body>
 </html>
