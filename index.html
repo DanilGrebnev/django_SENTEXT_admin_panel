@@ -664,6 +664,11 @@
           this.#updateSelectionText()
         }
 
+        /**
+         * Рендерит левую боковую панель (sidebar) с секциями и элементами меню
+         * @param {Array} sections - массив объектов секций
+         * Формат: [{ sectionTitle: string, list: [{ itemTitle: string, titleLink: string, addLink: string }] }]
+         */
         renderLeftColumn(sections) {
           if (!this.leftContainer) return
           this.leftContainer.innerHTML = ""
@@ -711,6 +716,12 @@
           })
         }
 
+        /**
+         * Рендерит основную таблицу с чатами, включая чекбоксы, UID, сессии и email
+         * @param {Array} items - массив объектов чатов
+         * Формат: [{ uid: string, email: string, session: string }]
+         * Побочные эффекты: обновляет счетчик выбранных элементов, сбрасывает чекбокс "выбрать все"
+         */
         renderChatsList(items) {
           if (!this.centerContainer) return
           this.centerContainer.innerHTML = ""
@@ -742,13 +753,7 @@
             )
             uidLink.textContent = uidValue
             uidLink.dataset.chatid = uidValue
-            uidLink.addEventListener("click", (e) => {
-              e.preventDefault()
-              // Даем возможности внешнему обработчику (строка 1036) сначала установить сообщения
-              setTimeout(() => {
-                this.#openChatForRow(row, item)
-              })
-            })
+            // Обработчик клика теперь в глобальном document.addEventListener
             uidCell.appendChild(uidLink)
             row.appendChild(uidCell)
 
@@ -789,8 +794,12 @@
           if (this.selectAllCheckbox) this.selectAllCheckbox.checked = false
         }
 
-        // Публичный метод: рендер чата по ID и массиву сообщений
-        // messages: Array<{ role: 'user' | 'assistant', content: string }>
+        /**
+         * Открывает чат для конкретного ID и отображает переданные сообщения
+         * @param {string} chatId - ID чата (ищется по textContent кнопки UID)
+         * @param {Array} messages - массив сообщений [{ role: 'user'|'assistant', content: string }]
+         * Примечание: ищет чат по textContent, а не по data-chatid
+         */
         chatMessageRender(chatId, messages) {
           if (!chatId) return
           const uids = Array.from(this.root.querySelectorAll(".table__uid"))
@@ -801,10 +810,42 @@
           this.#openChatForRow(row, undefined, messages)
         }
 
-        // Публичный метод: запомнить сообщения для текущего чата
-        // messages: Array<{ role: 'user' | 'assistant', content: string }>
+        /**
+         * Сохраняет сообщения глобально для текущего чата
+         * @param {Array} messages - массив сообщений [{ role: 'user'|'assistant', content: string }]
+         * Побочные эффекты: сохраняет сообщения в this.currentChatMessages
+         */
         setMessageContent(messages) {
           this.currentChatMessages = this.#normalizeMessages(messages)
+        }
+
+        /**
+         * Находит чат по ID и открывает его с переданными сообщениями
+         * @param {string} chatId - ID чата (ищется по data-chatid атрибуту)
+         * @param {Array} messages - массив сообщений [{ role: 'user'|'assistant', content: string }]
+         * Примечание: ищет чат по data-chatid атрибуту кнопки, если чат не найден - выводит предупреждение
+         * Автоматически сохраняет сообщения и открывает чат
+         */
+        openChatById(chatId, messages) {
+          // Ищем строку с нужным chatId
+          const uidButtons = this.root.querySelectorAll(".table__uid")
+          const targetButton = Array.from(uidButtons).find(
+            (btn) => btn.dataset.chatid === chatId
+          )
+
+          if (!targetButton) {
+            console.warn(`Chat with ID ${chatId} not found`)
+            return
+          }
+
+          const row = targetButton.closest("tr")
+          if (!row) return
+
+          // Сохраняем сообщения
+          this.currentChatMessages = this.#normalizeMessages(messages)
+
+          // Открываем чат с переданными сообщениями
+          this.#openChatForRow(row, null, this.currentChatMessages)
         }
 
         #openChatForRow(row, item, messages) {
@@ -847,23 +888,37 @@
             ? stored
             : []
 
-          list.forEach((msg) => {
-            const role = msg && (msg.role === "user" ? "user" : "assistant")
-            const content =
-              typeof msg?.content === "string"
-                ? msg.content
-                : String(msg?.content ?? "")
+          if (list.length === 0) {
+            // Если сообщений нет, показываем заглушку
+            const emptyMessage = document.createElement("div")
+            emptyMessage.className = "chat__empty"
+            emptyMessage.textContent = "Сообщений нет"
+            emptyMessage.style.cssText = `
+              text-align: center;
+              color: #888;
+              font-style: italic;
+              padding: 20px;
+            `
+            messagesContainer.appendChild(emptyMessage)
+          } else {
+            list.forEach((msg) => {
+              const role = msg && (msg.role === "user" ? "user" : "assistant")
+              const content =
+                typeof msg?.content === "string"
+                  ? msg.content
+                  : String(msg?.content ?? "")
 
-            const msgRow = document.createElement("div")
-            msgRow.className = `chat__message chat__message--${role}`
+              const msgRow = document.createElement("div")
+              msgRow.className = `chat__message chat__message--${role}`
 
-            const bubble = document.createElement("div")
-            bubble.className = "chat__bubble"
-            bubble.textContent = content
+              const bubble = document.createElement("div")
+              bubble.className = "chat__bubble"
+              bubble.textContent = content
 
-            msgRow.appendChild(bubble)
-            messagesContainer.appendChild(msgRow)
-          })
+              msgRow.appendChild(bubble)
+              messagesContainer.appendChild(msgRow)
+            })
+          }
 
           chatWrapper.appendChild(messagesContainer)
           chatCell.appendChild(chatWrapper)
@@ -935,6 +990,12 @@
           }
         }
 
+        /**
+         * Рендерит пагинацию внизу таблицы
+         * @param {Object} params - объект с параметрами пагинации
+         * @param {number} params.pagesAmount - общее количество страниц
+         * @param {number} params.activePage - номер активной страницы
+         */
         renderPagination({ pagesAmount, activePage }) {
           if (!this.paginationContainer) return
           this.paginationContainer.innerHTML = ""
@@ -1024,6 +1085,9 @@
       const renderer = new PageRenderer()
       const dataEmitter = new EventEmitter()
 
+      // Сохраняем текущие параметры поиска для пагинации
+      let currentSearchParams = {}
+
       // Объявляем обработчики событий
       const ACTIONS = {
         loadedMainData: "mainData:loaded",
@@ -1032,6 +1096,7 @@
         setChatData: "setChatData",
         searchByMessage: "searchByMessage",
         searchByEmail: "searchByEmail",
+        openChatAndInsertMessage: "openChagAndInsertMessage",
       }
 
       // ==== Регистрируем обработчик события ====
@@ -1041,6 +1106,7 @@
       dataEmitter.on(ACTIONS.setChatData, setMessagesData)
       dataEmitter.on(ACTIONS.searchByMessage, searchChatsByMessage)
       dataEmitter.on(ACTIONS.searchByEmail, searchChatsByEmail)
+      dataEmitter.on(ACTIONS.openChatAndInsertMessage, openChatAndInsertMessage)
 
       // ==== Функции рендера данных с сервера ====
       function renderMainData(data) {
@@ -1055,33 +1121,50 @@
       function setMessagesData(data) {
         renderer.setMessageContent(data)
       }
-
       function searchChatsByMessage(searchQuery) {
-        fetchMainData(1, { message: searchQuery })
+        if (searchQuery && searchQuery.trim()) {
+          currentSearchParams = {
+            ...currentSearchParams,
+            message: searchQuery.trim(),
+          }
+        } else {
+          delete currentSearchParams.message
+        }
+        fetchMainData(1, currentSearchParams)
       }
-
       function searchChatsByEmail(searchQuery) {
-        fetchMainData(1, { email: searchQuery })
+        if (searchQuery && searchQuery.trim()) {
+          currentSearchParams = {
+            ...currentSearchParams,
+            email: searchQuery.trim(),
+          }
+        } else {
+          delete currentSearchParams.email
+        }
+        fetchMainData(1, currentSearchParams)
+      }
+      function openChatAndInsertMessage(data) {
+        const { chatId, messages = [] } = data
+        renderer.openChatById(chatId, messages)
       }
 
       // Запрашиваем данные с сервера и дёргаем емиттер
       async function fetchMainData(page = 1, searchParams = {}) {
-        // console.log(searchParams)
         let url = GET_CHATS_URL + `?page=${page}`
 
-        // Добавляем параметры поиска если они есть
-        if (searchParams.message) {
-          url += `&message=${encodeURIComponent(searchParams.message)}`
+        // Добавляем параметры поиска если они есть и не пустые
+        if (searchParams.message && searchParams.message.trim()) {
+          url += `&message=${encodeURIComponent(searchParams.message.trim())}`
         }
-        if (searchParams.email) {
-          url += `&email=${encodeURIComponent(searchParams.email)}`
+        if (searchParams.email && searchParams.email.trim()) {
+          url += `&email=${encodeURIComponent(searchParams.email.trim())}`
         }
 
         const response = await fetch(url, {
           credentials: "include",
         })
         if (!response.ok) return
-        const data = await response.json()
+        // const data = await response.json()
 
         // const mainPageData = {
         //   pagesAmount: 29,
@@ -1129,46 +1212,46 @@
         }
         const data = await response.json()
 
-        const sidebarData = [
-          {
-            sectionTitle: "Authentication and Authorization",
-            list: [
-              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-              {
-                itemTitle: "Anonymous usage limits",
-                titleLink: "#",
-                addLink: "#",
-              },
-              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-              {
-                itemTitle: "Anonymous usage limits",
-                titleLink: "#",
-                addLink: "#",
-              },
-              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-              {
-                itemTitle: "Anonymous usage limits",
-                titleLink: "#",
-                addLink: "#",
-              },
-              { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-            ],
-          },
-          {
-            sectionTitle: "LLM Integration",
-            list: [{ itemTitle: "Messages", titleLink: "#", addLink: "#" }],
-          },
-          {
-            sectionTitle: "Payments",
-            list: [
-              { itemTitle: "Billing plans", titleLink: "#", addLink: "#" },
-            ],
-          },
-          {
-            sectionTitle: "Python Social Auth",
-            list: [{ itemTitle: "Users", titleLink: "#", addLink: "#" }],
-          },
-        ]
+        // const sidebarData = [
+        //   {
+        //     sectionTitle: "Authentication and Authorization",
+        //     list: [
+        //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+        //       {
+        //         itemTitle: "Anonymous usage limits",
+        //         titleLink: "#",
+        //         addLink: "#",
+        //       },
+        //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+        //       {
+        //         itemTitle: "Anonymous usage limits",
+        //         titleLink: "#",
+        //         addLink: "#",
+        //       },
+        //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+        //       {
+        //         itemTitle: "Anonymous usage limits",
+        //         titleLink: "#",
+        //         addLink: "#",
+        //       },
+        //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
+        //     ],
+        //   },
+        //   {
+        //     sectionTitle: "LLM Integration",
+        //     list: [{ itemTitle: "Messages", titleLink: "#", addLink: "#" }],
+        //   },
+        //   {
+        //     sectionTitle: "Payments",
+        //     list: [
+        //       { itemTitle: "Billing plans", titleLink: "#", addLink: "#" },
+        //     ],
+        //   },
+        //   {
+        //     sectionTitle: "Python Social Auth",
+        //     list: [{ itemTitle: "Users", titleLink: "#", addLink: "#" }],
+        //   },
+        // ]
 
         // const data = await new Promise((resolve) => {
         //   setTimeout(() => {
@@ -1192,15 +1275,10 @@
           console.error("ошибка получения сообщения")
         }
         const data = await response.json()
-
-        // const data = [
-        //   { role: "user", content: "Здравствуйте!" },
-        //   { role: "assistant", content: "Добрый день!" },
-        //   { role: "user", content: "Расскажи что-нибудь" },
-        // ]
-
+        return data
         // Устанавливаем данные
-        dataEmitter.emit(ACTIONS.setChatData, data)
+        // dataEmitter.emit(ACTIONS.setChatData, data)
+        // return Promise.resolve()
       }
 
       // ВЕШАЕМ ОБРАБОТЧИКИ СОБЫТИЙ
@@ -1208,14 +1286,26 @@
         // Обработка нажатия на элемент пагинации
         if (e.target.classList.contains("pagination__item")) {
           const pageNumber = e.target.dataset.page
-          fetchMainData(Number(pageNumber))
+          fetchMainData(Number(pageNumber), currentSearchParams)
           return
         }
 
         // Вызываем подгрузку сообщений для чата
         if (e.target.classList.contains("table__uid")) {
           const chatId = e.target.dataset.chatid
-          fetchChatMessages(chatId)
+
+          // const data = [
+          //   { role: "user", content: "Здравствуйте!" },
+          //   { role: "assistant", content: "Добрый день!" },
+          //   { role: "user", content: "Иди нахуй" },
+          // ]
+
+          fetchChatMessages(chatId).then((data) => {
+            dataEmitter.emit(ACTIONS.openChatAndInsertMessage, {
+              chatId,
+              messages: data,
+            })
+          })
         }
 
         // Обработка поиска по сообщениям
@@ -1237,7 +1327,7 @@
         }
       })
 
-      // Инициализируем данные при загрузкестраницы
+      // Инициализируем данные при загрузке страницы
       function init() {
         fetchMainData()
         fetchSidebarData()

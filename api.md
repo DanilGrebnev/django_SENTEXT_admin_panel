@@ -40,20 +40,20 @@
 
 ## 2. GET_CHATS_URL - Получение списка чатов с пагинацией и поиском
 
-**Endpoint:** `GET /api/chats/?page={page}&messageSearch={messageSearch}&emailSearch={emailSearch}`
+**Endpoint:** `GET /api/chats/?page={page}&message={message}&email={email}`
 
 **Parameters:**
 
 - `page` (int) - номер страницы для пагинации
-- `messageSearch` (string, optional) - поиск по содержимому сообщений в чатах
-- `emailSearch` (string, optional) - поиск по email пользователей
+- `message` (string, optional) - поиск по содержимому сообщений в чатах
+- `email` (string, optional) - поиск по email пользователей
 
 **Примеры запросов:**
 
 - `GET /api/chats/?page=1` - получить первую страницу всех чатов
-- `GET /api/chats/?page=1&messageSearch=hello` - поиск чатов содержащих "hello" в сообщениях
-- `GET /api/chats/?page=1&emailSearch=admin@test.com` - поиск чатов пользователя с email "admin@test.com"
-- `GET /api/chats/?page=1&messageSearch=hello&emailSearch=user@example.com` - комбинированный поиск
+- `GET /api/chats/?page=1&message=hello` - поиск чатов содержащих "hello" в сообщениях
+- `GET /api/chats/?page=1&email=admin@test.com` - поиск чатов пользователя с email "admin@test.com"
+- `GET /api/chats/?page=1&message=hello&email=user@example.com` - комбинированный поиск
 
 **Response format:**
 
