@@ -535,6 +535,7 @@
       const GET_CHATS_URL = "/api/chats/"
       const GET_CHATS_MESSAGES_URL = "/api/chats/messages/"
       const GET_BREADCRUMBS_URL = "/api/breadcrumbs/"
+      const GET_DATE_FILTERS_URL = "/api/chats/date-filters/"
 
       /**
        * EventEmitter - класс для работы с событиями
@@ -642,6 +643,31 @@
       }
 
       class PageRenderer {
+        static DATE_FILTER_MONTHS = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
+        ]
+
+        static DATE_FILTER_FIELD_CANDIDATES = [
+          "date",
+          "created_at",
+          "createdAt",
+          "updated_at",
+          "updatedAt",
+          "happenedAt",
+          "when",
+          "timestamp",
+        ]
         constructor() {
           this.root = document
           this.breadcrumbsContainer = this.root.querySelector(".breadcrumbs")
@@ -656,6 +682,11 @@
           this.currentChatMessages = null
           this.selectionElement = this.root.querySelector(".main__selection")
           this.totalItemsOnPage = 0
+          this.dateFilterState = this.#createDateFilterState()
+          this.dateFilterIndex = {}
+          this.dateFilterData = []
+          this.dateFilterExtractor = null
+          this.dateFilterYearOrder = "desc"
           // Обновим счётчик выбранных/всего при инициализации
           this.#updateSelectionText()
         }
@@ -1106,13 +1137,481 @@
             : fallback || ""
         }
 
+        #escapeHtml(value) {
+          const source = value == null ? "" : value
+          return String(source)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;")
+        }
+
+        #createDateFilterState() {
+          return {
+            level: "root",
+            year: null,
+            monthKey: null,
+            monthLabel: null,
+            monthNumber: null,
+            day: null,
+          }
+        }
+
+        #autoDetectDateExtractor(list) {
+          const sample = Array.isArray(list)
+            ? list.find((item) => item && typeof item === "object")
+            : null
+          if (!sample) {
+            return (item) =>
+              item?.date ??
+              item?.created_at ??
+              item?.createdAt ??
+              item?.updated_at ??
+              item?.updatedAt ??
+              item?.happenedAt ??
+              item?.when ??
+              item?.timestamp ??
+              null
+          }
+          const key =
+            PageRenderer.DATE_FILTER_FIELD_CANDIDATES.find((field) =>
+              Object.prototype.hasOwnProperty.call(sample, field)
+            ) || "date"
+          return (item) => (item && typeof item === "object" ? item?.[key] : null)
+        }
+
+        #parseDateToParts(input) {
+          let date = null
+          if (input instanceof Date) {
+            date = input
+          } else if (typeof input === "number" && Number.isFinite(input)) {
+            date = new Date(input)
+          } else if (typeof input === "string") {
+            const trimmed = input.trim()
+            if (!trimmed) return null
+            const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/)
+            if (isoMatch) {
+              const year = Number(isoMatch[1])
+              const monthNumber = Number(isoMatch[2])
+              const day = Number(isoMatch[3])
+              if (!monthNumber || !day) return null
+              const monthIndex = monthNumber - 1
+              const monthName =
+                PageRenderer.DATE_FILTER_MONTHS[monthIndex] || "Unknown"
+              return {
+                year,
+                monthIndex,
+                monthNumber,
+                monthLabel: `${monthName} ${year}`,
+                monthName,
+                day,
+              }
+            }
+            date = new Date(trimmed)
+          } else {
+            return null
+          }
+
+          if (!date || Number.isNaN(date.getTime())) return null
+
+          const year = date.getUTCFullYear()
+          const monthIndex = date.getUTCMonth()
+          const monthNumber = monthIndex + 1
+          const day = date.getUTCDate()
+          const monthName =
+            PageRenderer.DATE_FILTER_MONTHS[monthIndex] || "Unknown"
+
+          return {
+            year,
+            monthIndex,
+            monthNumber,
+            monthLabel: `${monthName} ${year}`,
+            monthName,
+            day,
+          }
+        }
+
+        #buildDateFilterIndex(list, extractor) {
+          if (typeof extractor !== "function") return {}
+          const index = {}
+          const source = Array.isArray(list) ? list : []
+          source.forEach((item) => {
+            let rawValue = null
+            try {
+              rawValue = extractor(item)
+            } catch (error) {
+              rawValue = null
+            }
+            if (rawValue == null) return
+            const parts = this.#parseDateToParts(rawValue)
+            if (!parts) return
+            const { year, monthNumber, monthLabel, monthIndex, day } = parts
+            const yearKey = String(year)
+            index[yearKey] ??= { months: {} }
+            const yearBucket = index[yearKey]
+            const monthKey = String(monthNumber).padStart(2, "0")
+            yearBucket.months[monthKey] ??= {
+              label: monthLabel,
+              monthNumber,
+              monthIndex,
+              days: {},
+            }
+            const monthBucket = yearBucket.months[monthKey]
+            monthBucket.days[day] ??= []
+            monthBucket.days[day].push(item)
+          })
+
+          Object.values(index).forEach((yearBucket) => {
+            Object.keys(yearBucket.months).forEach((monthKey) => {
+              const monthBucket = yearBucket.months[monthKey]
+              const ordered = {}
+              Object.keys(monthBucket.days)
+                .map(Number)
+                .sort((a, b) => a - b)
+                .forEach((day) => {
+                  ordered[day] = monthBucket.days[day]
+                })
+              monthBucket.days = ordered
+            })
+          })
+
+          return index
+        }
+
+        #getSortedYears() {
+          const years = Object.keys(this.dateFilterIndex || {}).map(Number)
+          const order = this.dateFilterYearOrder === "asc" ? 1 : -1
+          return years.sort((a, b) => (order === 1 ? a - b : b - a))
+        }
+
+        #getSortedMonths(year) {
+          const yearBucket = this.dateFilterIndex?.[String(year)]
+          if (!yearBucket) return []
+          return Object.entries(yearBucket.months || {})
+            .map(([key, value]) => ({
+              key,
+              label: value.label,
+              monthNumber: value.monthNumber,
+              monthIndex: value.monthIndex,
+            }))
+            .sort((a, b) => a.monthNumber - b.monthNumber)
+        }
+
+        #getDays(year, monthKey) {
+          const monthBucket =
+            this.dateFilterIndex?.[String(year)]?.months?.[
+              String(monthKey).padStart(2, "0")
+            ]
+          if (!monthBucket) return []
+          return Object.keys(monthBucket.days || {}).map(Number)
+        }
+
+        #countItemsForMonth(year, monthKey) {
+          const monthBucket =
+            this.dateFilterIndex?.[String(year)]?.months?.[
+              String(monthKey).padStart(2, "0")
+            ]
+          if (!monthBucket) return 0
+          return Object.values(monthBucket.days).reduce((total, group) => {
+            const size = Array.isArray(group) ? group.length : 0
+            return total + size
+          }, 0)
+        }
+
+        #countItemsForDay(year, monthKey, day) {
+          const monthBucket =
+            this.dateFilterIndex?.[String(year)]?.months?.[
+              String(monthKey).padStart(2, "0")
+            ]
+          if (!monthBucket) return 0
+          const group = monthBucket.days?.[Number(day)]
+          return Array.isArray(group) ? group.length : 0
+        }
+
+        #createDateFilterLink(text, onClick) {
+          const link = document.createElement("a")
+          link.href = "#"
+          link.className = "main__filter"
+          link.textContent = text
+          link.addEventListener("click", (event) => {
+            event.preventDefault()
+            onClick?.(event)
+          })
+          return link
+        }
+
+        #createDateFilterMuted(text) {
+          const span = document.createElement("span")
+          span.className = "main__filter"
+          span.style.opacity = "0.6"
+          span.textContent = text
+          return span
+        }
+
+        #createDateFilterBreadcrumb() {
+          const crumb = document.createElement("a")
+          crumb.href = "#"
+          crumb.className = "main__filter main__filter--active"
+          const state = this.dateFilterState
+          let label = '<span class="arrow">&lt;</span>All dates'
+          if (state.level === "year") {
+            label = '<span class="arrow">&lt;</span>Years'
+          } else if (state.level === "month") {
+            label = `<span class="arrow">&lt;</span>${this.#escapeHtml(
+              String(state.year)
+            )}`
+          } else if (state.level === "day") {
+            label = `<span class="arrow">&lt;</span>${this.#escapeHtml(
+              state.monthLabel || ""
+            )}`
+          }
+          crumb.innerHTML = label
+          crumb.addEventListener("click", (event) => {
+            event.preventDefault()
+            this.#handleDateFilterBreadcrumb()
+          })
+          return crumb
+        }
+
+        #handleDateFilterBreadcrumb() {
+          const state = this.dateFilterState
+          if (!state) return
+          if (state.level === "root") {
+            return
+          }
+          if (state.level === "year") {
+            this.#goToRoot({ emit: true })
+          } else if (state.level === "month") {
+            this.#goToYear(state.year, { emit: true })
+          } else if (state.level === "day") {
+            this.#goToMonth(state.year, state.monthKey, { emit: true })
+          }
+        }
+
+        #goToRoot({ emit = false } = {}) {
+          this.dateFilterState = this.#createDateFilterState()
+          if (emit) {
+            this.#emitDateFilterChange({})
+          }
+        }
+
+        #goToYear(year, { emit = false } = {}) {
+          const value = Number(year)
+          if (!Number.isFinite(value)) return
+          const yearBucket = this.dateFilterIndex?.[String(value)]
+          if (!yearBucket) return
+          this.dateFilterState = {
+            level: "year",
+            year: value,
+            monthKey: null,
+            monthLabel: null,
+            monthNumber: null,
+            day: null,
+          }
+          this.#renderDateFilterView()
+          if (emit) {
+            this.#emitDateFilterChange({ year: value })
+          }
+        }
+
+        #goToMonth(year, monthKey, { emit = false } = {}) {
+          const yearValue = Number(year)
+          if (!Number.isFinite(yearValue)) return
+          const key = String(monthKey).padStart(2, "0")
+          const monthBucket =
+            this.dateFilterIndex?.[String(yearValue)]?.months?.[key]
+          if (!monthBucket) return
+          this.dateFilterState = {
+            level: "month",
+            year: yearValue,
+            monthKey: key,
+            monthLabel: monthBucket.label,
+            monthNumber: monthBucket.monthNumber,
+            day: null,
+          }
+          this.#renderDateFilterView()
+          if (emit) {
+            this.#emitDateFilterChange({
+              year: yearValue,
+              month: monthBucket.monthNumber,
+            })
+          }
+        }
+
+        #goToDay(year, monthKey, day, { emit = false } = {}) {
+          const yearValue = Number(year)
+          if (!Number.isFinite(yearValue)) return
+          const key = String(monthKey).padStart(2, "0")
+          const monthBucket =
+            this.dateFilterIndex?.[String(yearValue)]?.months?.[key]
+          if (!monthBucket) return
+          const dayValue = Number(day)
+          if (!Number.isFinite(dayValue)) return
+          this.dateFilterState = {
+            level: "day",
+            year: yearValue,
+            monthKey: key,
+            monthLabel: monthBucket.label,
+            monthNumber: monthBucket.monthNumber,
+            day: dayValue,
+          }
+          this.#renderDateFilterView()
+          if (emit) {
+            this.#emitDateFilterChange({
+              year: yearValue,
+              month: monthBucket.monthNumber,
+              day: dayValue,
+            })
+          }
+        }
+
+        #emitDateFilterChange(filter = {}) {
+          if (
+            typeof dataEmitter === "undefined" ||
+            !dataEmitter ||
+            typeof dataEmitter.emit !== "function" ||
+            typeof ACTIONS === "undefined" ||
+            !ACTIONS.applyDateFilter
+          ) {
+            return
+          }
+          const payload = {}
+          if (filter.year != null && !Number.isNaN(Number(filter.year))) {
+            payload.year = Number(filter.year)
+          }
+          if (filter.month != null && !Number.isNaN(Number(filter.month))) {
+            payload.month = Number(filter.month)
+          }
+          if (filter.day != null && !Number.isNaN(Number(filter.day))) {
+            payload.day = Number(filter.day)
+          }
+          dataEmitter.emit(ACTIONS.applyDateFilter, payload)
+        }
+
+        #renderDateFilterView() {
+          const container = this.dateFilter
+          if (!container) return
+
+          container.innerHTML = ""
+
+          const breadcrumb = this.#createDateFilterBreadcrumb()
+          if (breadcrumb) {
+            container.appendChild(breadcrumb)
+          }
+
+          const state = this.dateFilterState
+          if (state.level === "root") {
+            const years = this.#getSortedYears()
+            if (!years.length) {
+              container.appendChild(
+                this.#createDateFilterMuted("No dates available")
+              )
+              return
+            }
+            years.forEach((year) => {
+              container.appendChild(
+                this.#createDateFilterLink(String(year), () =>
+                  this.#goToYear(year, { emit: true })
+                )
+              )
+            })
+            return
+          }
+
+          if (state.level === "year") {
+            const months = this.#getSortedMonths(state.year)
+            if (!months.length) {
+              container.appendChild(
+                this.#createDateFilterMuted("No months for this year")
+              )
+              return
+            }
+            months.forEach((month) => {
+              const count = this.#countItemsForMonth(state.year, month.key)
+              const text = count ? `${month.label} (${count})` : month.label
+              const link = this.#createDateFilterLink(text, () =>
+                this.#goToMonth(state.year, month.key, { emit: true })
+              )
+              if (!count) {
+                link.setAttribute("aria-disabled", "true")
+              }
+              container.appendChild(link)
+            })
+            return
+          }
+
+          if (state.level === "month") {
+            const days = this.#getDays(state.year, state.monthKey)
+            if (!days.length) {
+              container.appendChild(
+                this.#createDateFilterMuted("No days for this month")
+              )
+              return
+            }
+            const monthWord =
+              (state.monthLabel && state.monthLabel.split(" ")[0]) || ""
+            days.forEach((day) => {
+              const count = this.#countItemsForDay(
+                state.year,
+                state.monthKey,
+                day
+              )
+              const suffix = count > 1 ? ` (${count})` : ""
+              container.appendChild(
+                this.#createDateFilterLink(`${monthWord} ${day}${suffix}`, () =>
+                  this.#goToDay(state.year, state.monthKey, day, { emit: true })
+                )
+              )
+            })
+            return
+          }
+
+          if (state.level === "day") {
+            const monthWord =
+              (state.monthLabel && state.monthLabel.split(" ")[0]) || ""
+            container.appendChild(
+              this.#createDateFilterLink(
+                `${monthWord} ${state.day}`,
+                () =>
+                  this.#emitDateFilterChange({
+                    year: state.year,
+                    month: state.monthNumber,
+                    day: state.day,
+                  })
+              )
+            )
+          }
+        }
+
         /**
-         * Рендерит фильтры даты
-         * @param {Array} items - массив объектов чатов
-         * Формат: [{ uid: string, email: string, session: string }]
-         * Побочные эффекты: обновляет счетчик выбранных элементов, сбрасывает чекбокс "выбрать все"
+         * Рендерит фильтр по датам и подписывает обработчики выбора
+         * @param {Array} items - массив объектов с датами
+         * @param {{ getDate?: (item: any) => string | number | Date, yearOrder?: "asc" | "desc" }} [options]
          */
-        renderDateFilter(items) {}
+        renderDateFilter(items, options = {}) {
+          if (!this.dateFilter) return
+
+          const list = Array.isArray(items) ? items.slice() : []
+          if (options && typeof options.yearOrder === "string") {
+            const normalized = options.yearOrder.toLowerCase()
+            if (normalized === "asc" || normalized === "desc") {
+              this.dateFilterYearOrder = normalized
+            }
+          }
+
+          const extractor =
+            typeof options.getDate === "function"
+              ? options.getDate
+              : this.dateFilterExtractor ||
+                this.#autoDetectDateExtractor(list)
+
+          this.dateFilterExtractor = extractor
+          this.dateFilterData = list
+          this.dateFilterIndex = this.#buildDateFilterIndex(list, extractor)
+          this.dateFilterState = this.#createDateFilterState()
+          this.#renderDateFilterView()
+        }
       }
 
       const renderer = new PageRenderer()
@@ -1131,7 +1630,8 @@
         searchByMessage: "searchByMessage",
         searchByEmail: "searchByEmail",
         openChatAndInsertMessage: "openChagAndInsertMessage",
-        renderDate: "render-date",
+        loadDateFilters: "load-data",
+        applyDateFilter: "date-filter:apply",
       }
 
       // ==== Регистрируем обработчик события ====
@@ -1143,7 +1643,8 @@
       dataEmitter.on(ACTIONS.searchByMessage, searchChatsByMessage)
       dataEmitter.on(ACTIONS.searchByEmail, searchChatsByEmail)
       dataEmitter.on(ACTIONS.openChatAndInsertMessage, openChatAndInsertMessage)
-      dataEmitter.on(ACTIONS.renderDate, renderDate)
+      dataEmitter.on(ACTIONS.loadDateFilters, handleDateFiltersLoad)
+      dataEmitter.on(ACTIONS.applyDateFilter, applyDateFilterSelection)
 
       // ==== Функции рендера данных с сервера ====
       function renderMainData(data) {
@@ -1161,10 +1662,75 @@
       function setMessagesData(data) {
         renderer.setMessageContent(data)
       }
+      function handleDateFiltersLoad(payload) {
+        const isObjectPayload =
+          payload && typeof payload === "object" && !Array.isArray(payload)
+        const items = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.items)
+          ? payload.items
+          : []
+        const options = {}
+        if (isObjectPayload) {
+          if (typeof payload.getDate === "function") {
+            options.getDate = payload.getDate
+          }
+          if (
+            typeof payload.yearOrder === "string" &&
+            (payload.yearOrder.toLowerCase() === "asc" ||
+              payload.yearOrder.toLowerCase() === "desc")
+          ) {
+            options.yearOrder = payload.yearOrder.toLowerCase()
+          }
+        }
 
-      function renderDate(date) {
-        // логика по рендеру даты из PageRender
+        renderer.renderDateFilter(items, options)
       }
+
+      function applyDateFilterSelection(filter) {
+        const yearValue =
+          filter && filter.year != null && !Number.isNaN(Number(filter.year))
+            ? Number(filter.year)
+            : null
+        const monthValue =
+          filter && filter.month != null && !Number.isNaN(Number(filter.month))
+            ? Number(filter.month)
+            : null
+        const dayValue =
+          filter && filter.day != null && !Number.isNaN(Number(filter.day))
+            ? Number(filter.day)
+            : null
+
+        if (yearValue != null) {
+          currentSearchParams = {
+            ...currentSearchParams,
+            created_at__year: yearValue,
+          }
+        } else {
+          delete currentSearchParams.created_at__year
+        }
+
+        if (monthValue != null) {
+          currentSearchParams = {
+            ...currentSearchParams,
+            created_at__month: monthValue,
+          }
+        } else {
+          delete currentSearchParams.created_at__month
+        }
+
+        if (dayValue != null) {
+          currentSearchParams = {
+            ...currentSearchParams,
+            created_at__day: dayValue,
+          }
+        } else {
+          delete currentSearchParams.created_at__day
+        }
+
+        fetchMainData(1, currentSearchParams)
+      }
+
 
       function searchChatsByMessage(searchQuery) {
         if (searchQuery && searchQuery.trim()) {
@@ -1204,6 +1770,24 @@
           }
           if (searchParams.email && searchParams.email.trim()) {
             url += `&email=${encodeURIComponent(searchParams.email.trim())}`
+          }
+          if (
+            searchParams.created_at__year != null &&
+            !Number.isNaN(Number(searchParams.created_at__year))
+          ) {
+            url += `&created_at__year=${Number(searchParams.created_at__year)}`
+          }
+          if (
+            searchParams.created_at__month != null &&
+            !Number.isNaN(Number(searchParams.created_at__month))
+          ) {
+            url += `&created_at__month=${Number(searchParams.created_at__month)}`
+          }
+          if (
+            searchParams.created_at__day != null &&
+            !Number.isNaN(Number(searchParams.created_at__day))
+          ) {
+            url += `&created_at__day=${Number(searchParams.created_at__day)}`
           }
           // console.log({ url })
           const response = await fetch(url, {
@@ -1246,6 +1830,21 @@
           dataEmitter.emit(ACTIONS.renderPagination, navigationData)
         } catch (error) {
           console.error("fetchMainData error:", error)
+        }
+      }
+      async function fetchDateFilters() {
+        try {
+          const response = await fetch(GET_DATE_FILTERS_URL, {
+            credentials: "include",
+          })
+          if (!response.ok) {
+            throw new Error("Ошибка получения дат фильтра")
+          }
+          const data = await response.json()
+          dataEmitter.emit(ACTIONS.loadDateFilters, data)
+        } catch (error) {
+          console.error("fetchDateFilters error:", error)
+          dataEmitter.emit(ACTIONS.loadDateFilters, DATE_FILTER_FALLBACK)
         }
       }
 
@@ -1408,7 +2007,7 @@
       /* Данные dateFilter */
       // ==== Примеры разнородных данных (просто для демонстрации) ====
       // ==== Пример моков: произвольный список с ISO-датами (может быть Date/ts) ====
-      const items = [
+      const DATE_FILTER_FALLBACK = [
         { id: 1, date: "2024-12-29", title: "Legacy" },
         { id: 2, created_at: "2025-05-07", title: "A" },
         { id: 3, created_at: "2025-05-08T10:30:00Z", title: "B" },
@@ -1438,290 +2037,10 @@
         { id: 27, date: "2025-09-11" },
       ]
 
-      //====
-      class DateFilterRender {
-        static MONTHS_EN = [
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December",
-        ]
-        static pad(n) {
-          return String(n).padStart(2, "0")
-        }
-        static monthToNumberByName(name) {
-          const i = DateFilterRender.MONTHS_EN.indexOf(name)
-          return DateFilterRender.pad(i >= 0 ? i + 1 : 0)
-        }
-        static escapeHtml(s) {
-          return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
-        }
-        // Парсим "источник даты" в части (год/месяц/день) без TZ-сюрпризов
-        static parseToParts(input) {
-          let d
-          if (input instanceof Date) d = input
-          else if (typeof input === "number") d = new Date(input)
-          else if (typeof input === "string") {
-            const m = input.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/)
-            if (m) {
-              const y = +m[1],
-                mo = +m[2],
-                da = +m[3]
-              const monthName = DateFilterRender.MONTHS_EN[mo - 1] || "Unknown"
-              return {
-                year: y,
-                monthIndex: mo - 1,
-                monthName,
-                monthLabel: `${monthName} ${y}`,
-                day: da,
-              }
-            }
-            d = new Date(input) // ISO с временем
-          } else throw new Error("Unsupported date input")
-
-          if (Number.isNaN(d.getTime())) throw new Error("Invalid date")
-          const y = d.getUTCFullYear()
-          const mo = d.getUTCMonth()
-          const da = d.getUTCDate()
-          const monthName = DateFilterRender.MONTHS_EN[mo] || "Unknown"
-          return {
-            year: y,
-            monthIndex: mo,
-            monthName,
-            monthLabel: `${monthName} ${y}`,
-            day: da,
-          }
-        }
-        // Строим индекс: year → monthLabel → day → [items]
-        static buildIndex(list, getDate) {
-          const idx = {}
-          for (const it of list) {
-            const raw = getDate(it)
-            if (raw == null) continue
-            let p
-            try {
-              p = DateFilterRender.parseToParts(raw)
-            } catch {
-              continue
-            }
-            const { year, monthLabel, day } = p
-            idx[year] ??= {}
-            idx[year][monthLabel] ??= {}
-            idx[year][monthLabel][day] ??= []
-            idx[year][monthLabel][day].push(it)
-          }
-          // сортируем дни
-          for (const y of Object.keys(idx)) {
-            for (const m of Object.keys(idx[y])) {
-              const days = Object.keys(idx[y][m])
-                .map(Number)
-                .sort((a, b) => a - b)
-              const ordered = {}
-              for (const d of days) ordered[d] = idx[y][m][d]
-              idx[y][m] = ordered
-            }
-          }
-          return idx
-        }
-
-        /**
-         * @param {HTMLElement} container — узел, куда рисуем (например, #filters__date)
-         * @param {Array<any>} list — произвольный список записей
-         * @param {{ getDate?:(it:any)=>string|number|Date, yearOrder?:"asc"|"desc" }} [opts]
-         */
-        constructor(container, list, opts = {}) {
-          this.container = container
-          this.getDate = opts.getDate || this.#autoDetectGetDate(list)
-          this.yearOrder = opts.yearOrder || "desc"
-          this.state = { level: "root", year: null, month: null, day: null }
-          this.index = DateFilterRender.buildIndex(list, this.getDate)
-          this.updateView() // первая отрисовка
-        }
-
-        // Публичные методы
-        setData(list) {
-          this.index = DateFilterRender.buildIndex(list, this.getDate)
-          this.goRoot()
-        }
-        setDateExtractor(fn) {
-          this.getDate = fn
-          // перестраиваем индекс на основе текущих исходных данных недоступно — нужен список.
-          // В реальном месте вызова вызови setData(list) сразу после смены extractor.
-        }
-        goRoot() {
-          this.state = { level: "root", year: null, month: null, day: null }
-          this.updateView()
-        }
-        goYear(year) {
-          this.state = { level: "year", year, month: null, day: null }
-          this.updateView()
-        }
-        goMonth(year, month) {
-          this.state = { level: "month", year, month, day: null }
-          this.updateView()
-        }
-        goDate(year, month, day) {
-          this.state = { level: "date", year, month, day }
-          this.updateView()
-        }
-        navigateBack(e) {
-          e?.preventDefault?.()
-          const { level } = this.state
-          if (level === "root") return
-          if (level === "year") this.goRoot()
-          else if (level === "month") this.goYear(this.state.year)
-          else if (level === "date")
-            this.goMonth(this.state.year, this.state.month)
-        }
-
-        // ===== Ниже — внутренняя отрисовка DOM =====
-        updateView() {
-          const c = this.container
-          c.innerHTML = ""
-
-          // Крошка «назад»
-          const crumb = document.createElement("a")
-          crumb.href = "#"
-          crumb.className = "main__filter"
-          crumb.addEventListener("click", (e) => this.navigateBack(e))
-          const st = this.state
-          if (st.level === "root")
-            crumb.innerHTML = `<span class="arrow">&lt;</span>All dates`
-          else if (st.level === "year")
-            crumb.innerHTML = `<span class="arrow">&lt;</span>Years`
-          else if (st.level === "month")
-            crumb.innerHTML = `<span class="arrow">&lt;</span>${DateFilterRender.escapeHtml(
-              String(st.year)
-            )}`
-          else
-            crumb.innerHTML = `<span class="arrow">&lt;</span>${DateFilterRender.escapeHtml(
-              st.month
-            )}`
-          crumb.classList.add("main__filter--active")
-          c.appendChild(crumb)
-
-          // Тело
-          if (st.level === "root") {
-            const years = Object.keys(this.index)
-              .map(Number)
-              .sort((a, b) => (this.yearOrder === "desc" ? b - a : a - b))
-            if (years.length === 0) {
-              c.appendChild(this.#muted("Нет данных"))
-              return
-            }
-            years.forEach((y) => {
-              c.appendChild(this.#link(String(y), () => this.goYear(y)))
-            })
-          } else if (st.level === "year") {
-            const months = Object.keys(this.index[st.year] || {})
-            if (months.length === 0) {
-              c.appendChild(this.#muted("Нет месяцев"))
-              return
-            }
-            months.forEach((m) => {
-              const daysObj = this.index[st.year][m] || {}
-              const count = Object.values(daysObj).reduce(
-                (acc, arr) => acc + arr.length,
-                0
-              )
-              const a = this.#link(`${m}${count ? ` (${count})` : ``}`, () =>
-                this.goMonth(st.year, m)
-              )
-              if (!count) a.setAttribute("aria-disabled", "true")
-              c.appendChild(a)
-            })
-          } else if (st.level === "month") {
-            const daysObj =
-              (this.index[st.year] && this.index[st.year][st.month]) || {}
-            const days = Object.keys(daysObj).map(Number)
-            if (!days.length) {
-              c.appendChild(this.#muted("Нет дат"))
-              return
-            }
-            const monthWord = st.month.split(" ")[0]
-            days.forEach((d) => {
-              const count = daysObj[d].length
-              c.appendChild(
-                this.#link(
-                  `${monthWord} ${d}${count > 1 ? ` (${count})` : ``}`,
-                  () => {
-                    this.goDate(st.year, st.month, d)
-                    const url = `/${st.year}/${DateFilterRender.monthToNumberByName(
-                      monthWord
-                    )}/${DateFilterRender.pad(d)}`
-                    console.log("Navigate to", url)
-                  }
-                )
-              )
-            })
-          } else if (st.level === "date") {
-            const monthWord = st.month.split(" ")[0]
-            c.appendChild(
-              this.#link(`${monthWord} ${st.day}`, () => {
-                const url = `/${st.year}/${DateFilterRender.monthToNumberByName(
-                  monthWord
-                )}/${DateFilterRender.pad(st.day)}`
-                console.log("Navigate to", url)
-                // window.location.href = url;
-              })
-            )
-          }
-        }
-
-        // ===== Внутренние помощники =====
-        #link(text, onClick) {
-          const a = document.createElement("a")
-          a.href = "#"
-          a.className = "main__filter"
-          a.textContent = text
-          a.addEventListener("click", (e) => {
-            e.preventDefault()
-            onClick?.()
-          })
-          return a
-        }
-        #muted(text) {
-          const span = document.createElement("span")
-          span.className = "main__filter"
-          span.style.opacity = "0.6"
-          span.textContent = text
-          return span
-        }
-        #autoDetectGetDate(list) {
-          const candidates = [
-            "date",
-            "created_at",
-            "createdAt",
-            "updated_at",
-            "updatedAt",
-            "happenedAt",
-            "when",
-            "timestamp",
-          ]
-          const sample = list.find(Boolean) || {}
-          const key = candidates.find((k) => k in sample) || "date"
-          return (item) => item?.[key]
-        }
-      }
-
-      // ==== Инициализация ====
-      function initDateFilters() {
-        const el = document.getElementById("filters__date")
-        // Явно: new DateFilterRender(el, items, { getDate: it => it.created_at });
-        new DateFilterRender(el, items)
-      }
 
       // Инициализируем данные при загрузке страницы
       function init() {
-        initDateFilters()
+        fetchDateFilters()
         fetchMainData()
         fetchSidebarData()
         fetchBreadcrumbs()
