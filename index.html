@@ -252,6 +252,16 @@
         background: #4a90e2;
       }
 
+      .crumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .arrow {
+        color: white;
+        margin-right: 6px;
+      }
+
       .main__actions {
         display: flex;
         align-items: center;
@@ -485,14 +495,11 @@
           </div>
         </div>
 
-        <div class="main__filters">
-          <a href="#" class="main__filter main__filter--active">All dates</a>
-          <a href="#" class="main__filter">May 2025</a>
-          <a href="#" class="main__filter">June 2025</a>
-          <a href="#" class="main__filter">July 2025</a>
-          <a href="#" class="main__filter">August 2025</a>
-          <a href="#" class="main__filter">September 2025</a>
-        </div>
+        <nav
+          class="main__filters"
+          id="filters"
+          aria-label="Фильтр по датам"
+        ></nav>
 
         <div class="main__actions">
           <span class="main__action-label">Action:</span>
@@ -1382,8 +1389,168 @@
         }
       })
 
+      /* Данные */
+      const data = {
+        2025: {
+          "May 2025": [7, 8, 11, 22],
+          "June 2025": [2, 3, 4, 5, 6, 9, 16, 18, 19, 29, 30],
+          "July 2025": [4, 5, 6, 7, 8],
+          "August 2025": [22, 28, 30],
+          "September 2025": [2, 4, 10, 11],
+        },
+      }
+
+      /* state */
+      let state = { level: "root", year: null, month: null, day: null }
+      const filtersEl = document.getElementById("filters")
+
+      function buildView() {
+        filtersEl.innerHTML = ""
+
+        // кнопка назад
+        const crumb = document.createElement("a")
+        crumb.href = "#"
+        crumb.className = "main__filter"
+        crumb.addEventListener("click", (e) => {
+          e.preventDefault()
+          onCrumbClick()
+        })
+
+        if (state.level === "root") {
+          crumb.innerHTML = `<span class="arrow">&lt;</span>All dates`
+          crumb.classList.add("main__filter--active")
+        } else if (state.level === "month") {
+          crumb.innerHTML = `<span class="arrow">&lt;</span>${escapeHtml(
+            String(state.year)
+          )}`
+          crumb.classList.add("main__filter--active")
+        } else if (state.level === "date") {
+          crumb.innerHTML = `<span class="arrow">&lt;</span>${escapeHtml(
+            state.month
+          )}`
+          crumb.classList.add("main__filter--active") // only crumb active on deepest level
+        }
+        filtersEl.appendChild(crumb)
+
+        // Body rendering
+        if (state.level === "root") {
+          const year = state.year || Object.keys(data)[0]
+          const months = Object.keys(data[year] || {})
+          months.forEach((m) => {
+            const a = document.createElement("a")
+            a.href = "#"
+            a.className = "main__filter"
+            a.textContent = m
+            if (!data[year][m] || data[year][m].length === 0)
+              a.setAttribute("aria-disabled", "true")
+            a.addEventListener("click", (e) => {
+              e.preventDefault()
+              state.level = "month"
+              state.year = year
+              state.month = m
+              state.day = null
+              buildView()
+            })
+            filtersEl.appendChild(a)
+          })
+        } else if (state.level === "month") {
+          const days = (data[state.year] && data[state.year][state.month]) || []
+          if (days.length === 0) {
+            const span = document.createElement("span")
+            span.className = "main__filter"
+            span.style.opacity = 0.6
+            span.textContent = "Нет дат"
+            filtersEl.appendChild(span)
+          } else {
+            days.forEach((d) => {
+              const a = document.createElement("a")
+              a.href = "#"
+              a.className = "main__filter"
+              const monthWord = state.month.split(" ")[0]
+              a.textContent = `${monthWord} ${d}`
+              a.addEventListener("click", (e) => {
+                e.preventDefault()
+                state.level = "date"
+                state.day = d
+                buildView()
+                const url = `/${state.year}/${monthToNumber(state.month)}/${pad(
+                  d
+                )}`
+                console.log("Navigate to", url)
+              })
+              filtersEl.appendChild(a)
+            })
+          }
+        } else if (state.level === "date") {
+          const a = document.createElement("a")
+          a.href = "#"
+          a.className = "main__filter"
+          const monthWord = state.month.split(" ")[0]
+          a.textContent = `${monthWord} ${state.day}`
+          // навигация
+          a.addEventListener("click", (e) => {
+            e.preventDefault()
+            const url = `/${state.year}/${monthToNumber(state.month)}/${pad(
+              state.day
+            )}`
+            console.log("Navigate to", url)
+            // window.location.href = url;
+          })
+          filtersEl.appendChild(a)
+        }
+      }
+
+      // helpers
+      function pad(n) {
+        return String(n).padStart(2, "0")
+      }
+      function monthToNumber(monthName) {
+        const m = monthName.split(" ")[0]
+        const map = {
+          January: 1,
+          February: 2,
+          March: 3,
+          April: 4,
+          May: 5,
+          June: 6,
+          July: 7,
+          August: 8,
+          September: 9,
+          October: 10,
+          November: 11,
+          December: 12,
+        }
+        return String(map[m] || 0).padStart(2, "0")
+      }
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      }
+
+      // хлебная крошка
+      function onCrumbClick() {
+        if (state.level === "root") return
+        if (state.level === "month") {
+          state.level = "root"
+          state.month = null
+          state.day = null
+          state.year = null
+        } else if (state.level === "date") {
+          state.level = "month"
+          state.day = null
+        }
+        buildView()
+      }
+
+      // init
+      function initDateFilters() {
+        state.level = "root"
+        state.year = Object.keys(data)[0]
+        buildView()
+      }
+
       // Инициализируем данные при загрузке страницы
       function init() {
+        initDateFilters()
         fetchMainData()
         fetchSidebarData()
         fetchBreadcrumbs()
