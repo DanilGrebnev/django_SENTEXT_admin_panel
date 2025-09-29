@@ -1391,6 +1391,7 @@
 
         #goToRoot({ emit = false } = {}) {
           this.dateFilterState = this.#createDateFilterState()
+          this.#renderDateFilterView()
           if (emit) {
             this.#emitDateFilterChange({})
           }
