@@ -497,7 +497,7 @@
 
         <nav
           class="main__filters"
-          id="filters"
+          id="filters__date"
           aria-label="Фильтр по датам"
         ></nav>
 
@@ -651,6 +651,7 @@
           this.selectAllCheckbox = this.root.querySelector(
             ".table__checkbox--select-all"
           )
+          this.dateFilter = this.root.getElementById("filters__date")
           this.openChatRow = null
           this.currentChatMessages = null
           this.selectionElement = this.root.querySelector(".main__selection")
@@ -1104,6 +1105,14 @@
             ? value
             : fallback || ""
         }
+
+        /**
+         * Рендерит фильтры даты
+         * @param {Array} items - массив объектов чатов
+         * Формат: [{ uid: string, email: string, session: string }]
+         * Побочные эффекты: обновляет счетчик выбранных элементов, сбрасывает чекбокс "выбрать все"
+         */
+        renderDateFilter(items) {}
       }
 
       const renderer = new PageRenderer()
@@ -1396,164 +1405,318 @@
         }
       })
 
-      /* Данные */
-      const data = {
-        2025: {
-          "May 2025": [7, 8, 11, 22],
-          "June 2025": [2, 3, 4, 5, 6, 9, 16, 18, 19, 29, 30],
-          "July 2025": [4, 5, 6, 7, 8],
-          "August 2025": [22, 28, 30],
-          "September 2025": [2, 4, 10, 11],
-        },
-      }
+      /* Данные dateFilter */
+      // ==== Примеры разнородных данных (просто для демонстрации) ====
+      // ==== Пример моков: произвольный список с ISO-датами (может быть Date/ts) ====
+      const items = [
+        { id: 1, date: "2024-12-29", title: "Legacy" },
+        { id: 2, created_at: "2025-05-07", title: "A" },
+        { id: 3, created_at: "2025-05-08T10:30:00Z", title: "B" },
+        { id: 4, happenedAt: 1751913600000, title: "C" }, // 2025-07-08 timestamp (UTC ms)
+        { id: 5, when: new Date("2025-06-02"), title: "D" },
+        { id: 6, date: "2025-06-03" },
+        { id: 7, date: "2025-06-04" },
+        { id: 8, date: "2025-06-05" },
+        { id: 9, date: "2025-06-06" },
+        { id: 10, date: "2025-06-09" },
+        { id: 11, date: "2025-06-16" },
+        { id: 12, date: "2025-06-18" },
+        { id: 13, date: "2025-06-19" },
+        { id: 14, date: "2025-06-29" },
+        { id: 15, date: "2025-06-30" },
+        { id: 16, date: "2025-07-04" },
+        { id: 17, date: "2025-07-05" },
+        { id: 18, date: "2025-07-06" },
+        { id: 19, date: "2025-07-07" },
+        { id: 20, date: "2025-07-08" },
+        { id: 21, date: "2025-08-22" },
+        { id: 22, date: "2025-08-28" },
+        { id: 23, date: "2025-08-30" },
+        { id: 24, date: "2025-09-02" },
+        { id: 25, date: "2025-09-04" },
+        { id: 26, date: "2025-09-10" },
+        { id: 27, date: "2025-09-11" },
+      ]
 
-      // ЛОГИКА ПО ОТРИСОВКЕ ДОЛЖНА БЫТЬ В КЛАССЕ PageRender
-      /* state */
-      let state = { level: "root", year: null, month: null, day: null }
-      const filtersEl = document.getElementById("filters")
-
-      function buildView() {
-        filtersEl.innerHTML = ""
-
-        // кнопка назад
-        const crumb = document.createElement("a")
-        crumb.href = "#"
-        crumb.className = "main__filter"
-        crumb.addEventListener("click", (e) => {
-          e.preventDefault()
-          onCrumbClick()
-        })
-
-        if (state.level === "root") {
-          crumb.innerHTML = `<span class="arrow">&lt;</span>All dates`
-          crumb.classList.add("main__filter--active")
-        } else if (state.level === "month") {
-          crumb.innerHTML = `<span class="arrow">&lt;</span>${escapeHtml(
-            String(state.year)
-          )}`
-          crumb.classList.add("main__filter--active")
-        } else if (state.level === "date") {
-          crumb.innerHTML = `<span class="arrow">&lt;</span>${escapeHtml(
-            state.month
-          )}`
-          crumb.classList.add("main__filter--active") // only crumb active on deepest level
+      //====
+      class DateFilterRender {
+        static MONTHS_EN = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
+        ]
+        static pad(n) {
+          return String(n).padStart(2, "0")
         }
-        filtersEl.appendChild(crumb)
+        static monthToNumberByName(name) {
+          const i = DateFilterRender.MONTHS_EN.indexOf(name)
+          return DateFilterRender.pad(i >= 0 ? i + 1 : 0)
+        }
+        static escapeHtml(s) {
+          return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        }
+        // Парсим "источник даты" в части (год/месяц/день) без TZ-сюрпризов
+        static parseToParts(input) {
+          let d
+          if (input instanceof Date) d = input
+          else if (typeof input === "number") d = new Date(input)
+          else if (typeof input === "string") {
+            const m = input.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/)
+            if (m) {
+              const y = +m[1],
+                mo = +m[2],
+                da = +m[3]
+              const monthName = DateFilterRender.MONTHS_EN[mo - 1] || "Unknown"
+              return {
+                year: y,
+                monthIndex: mo - 1,
+                monthName,
+                monthLabel: `${monthName} ${y}`,
+                day: da,
+              }
+            }
+            d = new Date(input) // ISO с временем
+          } else throw new Error("Unsupported date input")
 
-        // Body rendering
-        if (state.level === "root") {
-          const year = state.year || Object.keys(data)[0]
-          const months = Object.keys(data[year] || {})
-          months.forEach((m) => {
-            const a = document.createElement("a")
-            a.href = "#"
-            a.className = "main__filter"
-            a.textContent = m
-            if (!data[year][m] || data[year][m].length === 0)
-              a.setAttribute("aria-disabled", "true")
-            a.addEventListener("click", (e) => {
-              e.preventDefault()
-              state.level = "month"
-              state.year = year
-              state.month = m
-              state.day = null
-              buildView()
-            })
-            filtersEl.appendChild(a)
-          })
-        } else if (state.level === "month") {
-          const days = (data[state.year] && data[state.year][state.month]) || []
-          if (days.length === 0) {
-            const span = document.createElement("span")
-            span.className = "main__filter"
-            span.style.opacity = 0.6
-            span.textContent = "Нет дат"
-            filtersEl.appendChild(span)
-          } else {
-            days.forEach((d) => {
-              const a = document.createElement("a")
-              a.href = "#"
-              a.className = "main__filter"
-              const monthWord = state.month.split(" ")[0]
-              a.textContent = `${monthWord} ${d}`
-              a.addEventListener("click", (e) => {
-                e.preventDefault()
-                state.level = "date"
-                state.day = d
-                buildView()
-                const url = `/${state.year}/${monthToNumber(state.month)}/${pad(
-                  d
-                )}`
-                console.log("Navigate to", url)
-              })
-              filtersEl.appendChild(a)
-            })
+          if (Number.isNaN(d.getTime())) throw new Error("Invalid date")
+          const y = d.getUTCFullYear()
+          const mo = d.getUTCMonth()
+          const da = d.getUTCDate()
+          const monthName = DateFilterRender.MONTHS_EN[mo] || "Unknown"
+          return {
+            year: y,
+            monthIndex: mo,
+            monthName,
+            monthLabel: `${monthName} ${y}`,
+            day: da,
           }
-        } else if (state.level === "date") {
+        }
+        // Строим индекс: year → monthLabel → day → [items]
+        static buildIndex(list, getDate) {
+          const idx = {}
+          for (const it of list) {
+            const raw = getDate(it)
+            if (raw == null) continue
+            let p
+            try {
+              p = DateFilterRender.parseToParts(raw)
+            } catch {
+              continue
+            }
+            const { year, monthLabel, day } = p
+            idx[year] ??= {}
+            idx[year][monthLabel] ??= {}
+            idx[year][monthLabel][day] ??= []
+            idx[year][monthLabel][day].push(it)
+          }
+          // сортируем дни
+          for (const y of Object.keys(idx)) {
+            for (const m of Object.keys(idx[y])) {
+              const days = Object.keys(idx[y][m])
+                .map(Number)
+                .sort((a, b) => a - b)
+              const ordered = {}
+              for (const d of days) ordered[d] = idx[y][m][d]
+              idx[y][m] = ordered
+            }
+          }
+          return idx
+        }
+
+        /**
+         * @param {HTMLElement} container — узел, куда рисуем (например, #filters__date)
+         * @param {Array<any>} list — произвольный список записей
+         * @param {{ getDate?:(it:any)=>string|number|Date, yearOrder?:"asc"|"desc" }} [opts]
+         */
+        constructor(container, list, opts = {}) {
+          this.container = container
+          this.getDate = opts.getDate || this.#autoDetectGetDate(list)
+          this.yearOrder = opts.yearOrder || "desc"
+          this.state = { level: "root", year: null, month: null, day: null }
+          this.index = DateFilterRender.buildIndex(list, this.getDate)
+          this.updateView() // первая отрисовка
+        }
+
+        // Публичные методы
+        setData(list) {
+          this.index = DateFilterRender.buildIndex(list, this.getDate)
+          this.goRoot()
+        }
+        setDateExtractor(fn) {
+          this.getDate = fn
+          // перестраиваем индекс на основе текущих исходных данных недоступно — нужен список.
+          // В реальном месте вызова вызови setData(list) сразу после смены extractor.
+        }
+        goRoot() {
+          this.state = { level: "root", year: null, month: null, day: null }
+          this.updateView()
+        }
+        goYear(year) {
+          this.state = { level: "year", year, month: null, day: null }
+          this.updateView()
+        }
+        goMonth(year, month) {
+          this.state = { level: "month", year, month, day: null }
+          this.updateView()
+        }
+        goDate(year, month, day) {
+          this.state = { level: "date", year, month, day }
+          this.updateView()
+        }
+        navigateBack(e) {
+          e?.preventDefault?.()
+          const { level } = this.state
+          if (level === "root") return
+          if (level === "year") this.goRoot()
+          else if (level === "month") this.goYear(this.state.year)
+          else if (level === "date")
+            this.goMonth(this.state.year, this.state.month)
+        }
+
+        // ===== Ниже — внутренняя отрисовка DOM =====
+        updateView() {
+          const c = this.container
+          c.innerHTML = ""
+
+          // Крошка «назад»
+          const crumb = document.createElement("a")
+          crumb.href = "#"
+          crumb.className = "main__filter"
+          crumb.addEventListener("click", (e) => this.navigateBack(e))
+          const st = this.state
+          if (st.level === "root")
+            crumb.innerHTML = `<span class="arrow">&lt;</span>All dates`
+          else if (st.level === "year")
+            crumb.innerHTML = `<span class="arrow">&lt;</span>Years`
+          else if (st.level === "month")
+            crumb.innerHTML = `<span class="arrow">&lt;</span>${DateFilterRender.escapeHtml(
+              String(st.year)
+            )}`
+          else
+            crumb.innerHTML = `<span class="arrow">&lt;</span>${DateFilterRender.escapeHtml(
+              st.month
+            )}`
+          crumb.classList.add("main__filter--active")
+          c.appendChild(crumb)
+
+          // Тело
+          if (st.level === "root") {
+            const years = Object.keys(this.index)
+              .map(Number)
+              .sort((a, b) => (this.yearOrder === "desc" ? b - a : a - b))
+            if (years.length === 0) {
+              c.appendChild(this.#muted("Нет данных"))
+              return
+            }
+            years.forEach((y) => {
+              c.appendChild(this.#link(String(y), () => this.goYear(y)))
+            })
+          } else if (st.level === "year") {
+            const months = Object.keys(this.index[st.year] || {})
+            if (months.length === 0) {
+              c.appendChild(this.#muted("Нет месяцев"))
+              return
+            }
+            months.forEach((m) => {
+              const daysObj = this.index[st.year][m] || {}
+              const count = Object.values(daysObj).reduce(
+                (acc, arr) => acc + arr.length,
+                0
+              )
+              const a = this.#link(`${m}${count ? ` (${count})` : ``}`, () =>
+                this.goMonth(st.year, m)
+              )
+              if (!count) a.setAttribute("aria-disabled", "true")
+              c.appendChild(a)
+            })
+          } else if (st.level === "month") {
+            const daysObj =
+              (this.index[st.year] && this.index[st.year][st.month]) || {}
+            const days = Object.keys(daysObj).map(Number)
+            if (!days.length) {
+              c.appendChild(this.#muted("Нет дат"))
+              return
+            }
+            const monthWord = st.month.split(" ")[0]
+            days.forEach((d) => {
+              const count = daysObj[d].length
+              c.appendChild(
+                this.#link(
+                  `${monthWord} ${d}${count > 1 ? ` (${count})` : ``}`,
+                  () => {
+                    this.goDate(st.year, st.month, d)
+                    const url = `/${st.year}/${DateFilterRender.monthToNumberByName(
+                      monthWord
+                    )}/${DateFilterRender.pad(d)}`
+                    console.log("Navigate to", url)
+                  }
+                )
+              )
+            })
+          } else if (st.level === "date") {
+            const monthWord = st.month.split(" ")[0]
+            c.appendChild(
+              this.#link(`${monthWord} ${st.day}`, () => {
+                const url = `/${st.year}/${DateFilterRender.monthToNumberByName(
+                  monthWord
+                )}/${DateFilterRender.pad(st.day)}`
+                console.log("Navigate to", url)
+                // window.location.href = url;
+              })
+            )
+          }
+        }
+
+        // ===== Внутренние помощники =====
+        #link(text, onClick) {
           const a = document.createElement("a")
           a.href = "#"
           a.className = "main__filter"
-          const monthWord = state.month.split(" ")[0]
-          a.textContent = `${monthWord} ${state.day}`
-          // навигация
+          a.textContent = text
           a.addEventListener("click", (e) => {
             e.preventDefault()
-            const url = `/${state.year}/${monthToNumber(state.month)}/${pad(
-              state.day
-            )}`
-            console.log("Navigate to", url)
-            // window.location.href = url;
+            onClick?.()
           })
-          filtersEl.appendChild(a)
+          return a
+        }
+        #muted(text) {
+          const span = document.createElement("span")
+          span.className = "main__filter"
+          span.style.opacity = "0.6"
+          span.textContent = text
+          return span
+        }
+        #autoDetectGetDate(list) {
+          const candidates = [
+            "date",
+            "created_at",
+            "createdAt",
+            "updated_at",
+            "updatedAt",
+            "happenedAt",
+            "when",
+            "timestamp",
+          ]
+          const sample = list.find(Boolean) || {}
+          const key = candidates.find((k) => k in sample) || "date"
+          return (item) => item?.[key]
         }
       }
 
-      // helpers
-      function pad(n) {
-        return String(n).padStart(2, "0")
-      }
-      function monthToNumber(monthName) {
-        const m = monthName.split(" ")[0]
-        const map = {
-          January: 1,
-          February: 2,
-          March: 3,
-          April: 4,
-          May: 5,
-          June: 6,
-          July: 7,
-          August: 8,
-          September: 9,
-          October: 10,
-          November: 11,
-          December: 12,
-        }
-        return String(map[m] || 0).padStart(2, "0")
-      }
-      function escapeHtml(s) {
-        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      }
-
-      // хлебная крошка
-      function onCrumbClick() {
-        if (state.level === "root") return
-        if (state.level === "month") {
-          state.level = "root"
-          state.month = null
-          state.day = null
-          state.year = null
-        } else if (state.level === "date") {
-          state.level = "month"
-          state.day = null
-        }
-        buildView()
-      }
-
-      // init
+      // ==== Инициализация ====
       function initDateFilters() {
-        state.level = "root"
-        state.year = Object.keys(data)[0]
-        buildView()
+        const el = document.getElementById("filters__date")
+        // Явно: new DateFilterRender(el, items, { getDate: it => it.created_at });
+        new DateFilterRender(el, items)
       }
 
       // Инициализируем данные при загрузке страницы
