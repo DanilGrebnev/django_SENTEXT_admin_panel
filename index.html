@@ -241,16 +241,21 @@
         margin-bottom: 16px;
         flex-wrap: wrap;
       }
-      .main__filter {
+      .date__filter {
         color: #ffffff;
         text-decoration: none;
         font-size: 14px;
         padding: 4px 8px;
         border-radius: 4px;
       }
-      .main__filter--active {
+
+      .date__filter[data-active="true"] {
         background: #4a90e2;
       }
+
+      /* .date__filter--active {
+        background: #4a90e2;
+      } */
 
       .main__actions {
         display: flex;
@@ -485,14 +490,7 @@
           </div>
         </div>
 
-        <div class="main__filters">
-          <a href="#" class="main__filter main__filter--active">All dates</a>
-          <a href="#" class="main__filter">May 2025</a>
-          <a href="#" class="main__filter">June 2025</a>
-          <a href="#" class="main__filter">July 2025</a>
-          <a href="#" class="main__filter">August 2025</a>
-          <a href="#" class="main__filter">September 2025</a>
-        </div>
+        <div class="main__filters"></div>
 
         <div class="main__actions">
           <span class="main__action-label">Action:</span>
@@ -519,15 +517,23 @@
           </thead>
           <tbody class="js-messages-list"></tbody>
         </table>
+        <template id="dates-template">
+          <button class="date__filter">May 2025</button>
+        </template>
         <div class="js-pagination"></div>
       </div>
     </div>
 
     <script>
-      const GET_FILTERS_URL = "/api/filters/"
-      const GET_CHATS_URL = "/api/chats/"
-      const GET_CHATS_MESSAGES_URL = "/api/chats/messages/"
-      const GET_BREADCRUMBS_URL = "/api/breadcrumbs/"
+      const FETCH_URLS = {
+        FILTERS: "/api/filters/",
+        CHATS: "/api/chats/",
+        CHATS_MESSAGES: "/api/chats/messages/",
+        BREADCRUMBS: "/api/breadcrumbs/",
+        FILTERS: "/api/date-filters",
+      }
+      // Сохраняем текущие параметры поиска для пагинации
+      let currentSearchParams = {}
 
       /**
        * EventEmitter - класс для работы с событиями
@@ -637,17 +643,18 @@
       class PageRenderer {
         constructor() {
           this.root = document
-          this.breadcrumbsContainer = this.root.querySelector(".breadcrumbs")
-          this.leftContainer = this.root.querySelector(".js-left-list")
-          this.centerContainer = this.root.querySelector(".js-messages-list")
-          this.paginationContainer = this.root.querySelector(".js-pagination")
-          this.selectAllCheckbox = this.root.querySelector(
-            ".table__checkbox--select-all"
-          )
+          this.breadcrumbsContainer = this.$(".breadcrumbs")
+          this.leftContainer = this.$(".js-left-list")
+          this.centerContainer = this.$(".js-messages-list")
+          this.paginationContainer = this.$(".js-pagination")
+          this.selectAllCheckbox = this.$(".table__checkbox--select-all")
           this.openChatRow = null
           this.currentChatMessages = null
-          this.selectionElement = this.root.querySelector(".main__selection")
+          this.selectionElement = this.$(".main__selection")
           this.totalItemsOnPage = 0
+          this.dateButtonNode = this.$("#dates-template")
+
+          this.dateButtonsContainer = this.$(".main__filters")
           // Обновим счётчик выбранных/всего при инициализации
           this.#updateSelectionText()
         }
@@ -790,7 +797,7 @@
          */
         chatMessageRender(chatId, messages) {
           if (!chatId) return
-          const uids = Array.from(this.root.querySelectorAll(".table__uid"))
+          const uids = Array.from(this.$all(".table__uid"))
           const link = uids.find((el) => el.textContent === String(chatId))
           if (!link) return
           const row = link.closest("tr")
@@ -816,7 +823,7 @@
          */
         openChatById(chatId, messages) {
           // Ищем строку с нужным chatId
-          const uidButtons = this.root.querySelectorAll(".table__uid")
+          const uidButtons = this.$all(".table__uid")
           const targetButton = Array.from(uidButtons).find(
             (btn) => btn.dataset.chatid === chatId
           )
@@ -939,12 +946,8 @@
         }
 
         #setupSelectAll() {
-          const selectAllCheckbox = this.root.querySelector(
-            ".table__checkbox--select-all"
-          )
-          const rowCheckboxes = this.root.querySelectorAll(
-            ".table__checkbox--row"
-          )
+          const selectAllCheckbox = this.$(".table__checkbox--select-all")
+          const rowCheckboxes = this.$all(".table__checkbox--row")
 
           if (selectAllCheckbox) {
             selectAllCheckbox.addEventListener("change", () => {
@@ -958,9 +961,7 @@
         }
 
         #setupRowCheckboxListeners() {
-          const rowCheckboxes = this.root.querySelectorAll(
-            ".table__checkbox--row"
-          )
+          const rowCheckboxes = this.$all(".table__checkbox--row")
           rowCheckboxes.forEach((checkbox) => {
             checkbox.addEventListener("change", () => {
               this.#updateSelectionText()
@@ -969,10 +970,8 @@
         }
 
         #updateSelectionText() {
-          const total = this.root.querySelectorAll(".table__row").length
-          const selected = this.root.querySelectorAll(
-            ".table__checkbox--row:checked"
-          ).length
+          const total = this.$all(".table__row").length
+          const selected = this.$all(".table__checkbox--row:checked").length
           if (this.selectionElement) {
             this.selectionElement.textContent = `selected ${selected} of ${total}`
           }
@@ -1019,7 +1018,7 @@
 
           this.paginationContainer.appendChild(pagination)
         }
-
+        renderDatesTab() {}
         /**
          * Рендерит хлебные крошки в .breadcrumbs
          * @param {Array} items - массив объектов [{ text: string, link: string }]
@@ -1047,6 +1046,16 @@
               this.breadcrumbsContainer.appendChild(sep)
             }
           })
+        }
+
+        $(selector, root) {
+          const ctx = root || this.root
+          return ctx ? ctx.querySelector(selector) : null
+        }
+
+        $all(selector, root) {
+          const ctx = root || this.root
+          return ctx ? ctx.querySelectorAll(selector) : []
         }
 
         #generatePageNumbers(total, current) {
@@ -1097,13 +1106,56 @@
             ? value
             : fallback || ""
         }
+
+        // Отрисовка списка дат
+        renderDateFilters(dates = []) {
+          if (!Array.isArray(dates)) {
+            this.dateButtonsContainer.innerText = "Ошибка получения фильтра дат"
+            throw new Error("Dates is not array!")
+          }
+
+          const datesWithInitDate = [
+            { name: "All dates", value: "all" },
+            ...dates,
+          ]
+
+          const resultFiltersNode = datesWithInitDate.map((date) => {
+            const { name, value } = date
+            const dateButton =
+              this.dateButtonNode.content.firstElementChild.cloneNode(true)
+
+            dateButton.innerText = name
+            dateButton.id = name
+            dateButton.dataset.date = value
+
+            return dateButton
+          })
+
+          this.dateButtonsContainer.replaceChildren(...resultFiltersNode)
+        }
+
+        // Выбор фильтра даты
+        selectDateFilter(dateId) {
+          this.dateButtonsContainer.childNodes.forEach((node) => {
+            if (node.id === dateId) {
+              node.dataset.active = true
+
+              // если All - удаляем фильтр
+              if (node.dataset.date.toLowerCase() === "all") {
+                delete currentSearchParams.date
+                return
+              }
+
+              currentSearchParams.date = node.dataset.date
+              return
+            }
+            node.dataset.active = false
+          })
+        }
       }
 
       const renderer = new PageRenderer()
       const dataEmitter = new EventEmitter()
-
-      // Сохраняем текущие параметры поиска для пагинации
-      let currentSearchParams = {}
 
       // Объявляем обработчики событий
       const ACTIONS = {
@@ -1115,6 +1167,14 @@
         searchByMessage: "searchByMessage",
         searchByEmail: "searchByEmail",
         openChatAndInsertMessage: "openChagAndInsertMessage",
+        renderDateFilters: "renderFilters",
+        selectDateFilter: "selectDateFilter",
+      }
+
+      const EmitterActions = {
+        selectFirstFilterDate() {
+          dataEmitter.emit(ACTIONS.selectDateFilter, "All dates")
+        },
       }
 
       // ==== Регистрируем обработчик события ====
@@ -1126,6 +1186,8 @@
       dataEmitter.on(ACTIONS.searchByMessage, searchChatsByMessage)
       dataEmitter.on(ACTIONS.searchByEmail, searchChatsByEmail)
       dataEmitter.on(ACTIONS.openChatAndInsertMessage, openChatAndInsertMessage)
+      dataEmitter.on(ACTIONS.renderDateFilters, renderDateFilters)
+      dataEmitter.on(ACTIONS.selectDateFilter, selectDateFilter)
 
       // ==== Функции рендера данных с сервера ====
       function renderMainData(data) {
@@ -1143,6 +1205,13 @@
       function setMessagesData(data) {
         renderer.setMessageContent(data)
       }
+      function renderDateFilters(data) {
+        renderer.renderDateFilters(data)
+      }
+      function selectDateFilter(data) {
+        renderer.selectDateFilter(data)
+      }
+
       function searchChatsByMessage(searchQuery) {
         if (searchQuery && searchQuery.trim()) {
           currentSearchParams = {
@@ -1152,7 +1221,7 @@
         } else {
           delete currentSearchParams.message
         }
-        fetchMainData(1, currentSearchParams)
+        fetchMainData(1)
       }
       function searchChatsByEmail(searchQuery) {
         if (searchQuery && searchQuery.trim()) {
@@ -1163,29 +1232,59 @@
         } else {
           delete currentSearchParams.email
         }
-        fetchMainData(1, currentSearchParams)
+        fetchMainData(1)
       }
       function openChatAndInsertMessage(data) {
         const { chatId, messages = [] } = data
         renderer.openChatById(chatId, messages)
       }
 
-      // Запрашиваем данные с сервера и дёргаем емиттер
-      async function fetchMainData(page = 1, searchParams = {}) {
-        try {
-          let url = GET_CHATS_URL + `?page=${page}`
+      async function fetchDateFilter(filterId) {
+        const filters = await new Promise((res, rej) => {
+          setTimeout(() => {
+            res([
+              { name: "April 2025", value: new Date().getDate() },
+              { name: "April 2024", value: new Date().getDate() },
+              { name: "April 2023", value: new Date().getDate() },
+            ])
+          }, 1300)
+        })
 
-          // Добавляем параметры поиска если они есть и не пустые
-          if (searchParams.message && searchParams.message.trim()) {
-            url += `&message=${encodeURIComponent(searchParams.message.trim())}`
+        dataEmitter.emit(ACTIONS.renderDateFilters, filters)
+
+        return filters
+
+        try {
+          // const response = fetch(FETCH_URLS.FILTERS)
+          // if (!response.ok) {
+          //   throw new Error("Ошибка получения фильтров")
+          // }
+          // const filters = await response.json()
+          // dataEmitter.emit(ACTIONS.renderDateFilters, filters)
+        } catch (e) {
+          console.log(e)
+        }
+      }
+
+      // Запрашиваем данные с сервера и дёргаем емиттер
+      async function fetchMainData(page = 1) {
+        try {
+          const urlSearchParams = new URLSearchParams({
+            ...currentSearchParams,
+            page,
+          })
+          const searchParamsString = urlSearchParams.toString()
+
+          let url = FETCH_URLS.CHATS
+
+          if (searchParamsString) {
+            url += `?${searchParamsString}`
           }
-          if (searchParams.email && searchParams.email.trim()) {
-            url += `&email=${encodeURIComponent(searchParams.email.trim())}`
-          }
-          // console.log({ url })
+
           const response = await fetch(url, {
             credentials: "include",
           })
+
           if (!response.ok) return
           const data = await response.json()
 
@@ -1214,8 +1313,9 @@
           // const data = await new Promise((resolve) => {
           //   setTimeout(() => {
           //     resolve(mainPageData)
-          //   }, 1000)
+          //   }, 500)
           // })
+
           const { data: pageData, ...navigationData } = data
 
           // Эмитим событиями перерисовки страницы и обновлеем пагинацию
@@ -1225,11 +1325,10 @@
           console.error("fetchMainData error:", error)
         }
       }
-
       // Запрос данных для sidebar
       async function fetchSidebarData(page) {
         try {
-          const response = await fetch(GET_FILTERS_URL, {
+          const response = await fetch(FETCH_URLS.FILTERS, {
             credentials: "include",
           })
 
@@ -1289,11 +1388,10 @@
           console.error("fetchSidebarData error:", error)
         }
       }
-
       // Запрос хлебных крошек
       async function fetchBreadcrumbs() {
         try {
-          const response = await fetch(GET_BREADCRUMBS_URL, {
+          const response = await fetch(FETCH_URLS.BREADCRUMBS, {
             credentials: "include",
           })
           if (!response.ok) {
@@ -1310,7 +1408,7 @@
       async function fetchChatMessages(chatId) {
         try {
           const response = await fetch(
-            GET_CHATS_MESSAGES_URL + `?chatId=${chatId}`,
+            FETCH_URLS.CHATS_MESSAGES + `?chatId=${chatId}`,
             {
               credentials: "include",
             }
@@ -1331,7 +1429,7 @@
         // Обработка нажатия на элемент пагинации
         if (e.target.classList.contains("pagination__item")) {
           const pageNumber = e.target.dataset.page
-          fetchMainData(Number(pageNumber), currentSearchParams)
+          fetchMainData(Number(pageNumber))
           return
         }
 
@@ -1350,6 +1448,15 @@
               chatId,
               messages: data,
             })
+          })
+        }
+
+        // Обработка нажатия на кнопку фильтра по дате
+        if (e.target.classList.contains("date__filter")) {
+          const dateBtnId = e.target.id
+
+          Promise.all([fetchDateFilter(), fetchMainData()]).then(() => {
+            dataEmitter.emit(ACTIONS.selectDateFilter, dateBtnId)
           })
         }
 
@@ -1378,7 +1485,7 @@
             delete currentSearchParams.email
           }
 
-          fetchMainData(1, currentSearchParams)
+          fetchMainData()
         }
       })
 
@@ -1387,6 +1494,9 @@
         fetchMainData()
         fetchSidebarData()
         fetchBreadcrumbs()
+        fetchDateFilter().then(() => {
+          EmitterActions.selectFirstFilterDate()
+        })
       }
       // Инициализируем данные
       init()
