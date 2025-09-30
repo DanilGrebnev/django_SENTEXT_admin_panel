@@ -132,3 +132,41 @@
   { "text": "Messages", "link": "/admin/llm/messages/" }
 ]
 ```
+
+## 5. GET_DATE_FILTERS_URL - Получение фильтров по дате
+
+**Endpoint:** `GET /api/date-filters`
+
+**Описание:** Возвращает список доступных фильтров по дате для основной страницы. Каждый фильтр содержит название, значение и статус активности.
+
+**Parameters:**
+
+- нет
+
+**Response format:**
+
+```json
+[
+  {
+    "name": "April 2025",
+    "value": 5,
+    "active": false
+  },
+  {
+    "name": "April 2024",
+    "value": 4,
+    "active": false
+  },
+  {
+    "name": "April 2023",
+    "value": 3,
+    "active": true
+  }
+]
+```
+
+**Поля ответа:**
+
+- `name` (string) - отображаемое название фильтра
+- `value` (number) - числовое значение фильтра для передачи в API
+- `active` (boolean) - флаг активности фильтра (определяет визуальное состояние кнопки)

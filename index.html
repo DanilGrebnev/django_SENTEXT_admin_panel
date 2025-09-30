@@ -526,11 +526,11 @@
 
     <script>
       const FETCH_URLS = {
-        FILTERS: "/api/filters/",
+        SIDEBAR_FILTERS: "/api/filters/",
         CHATS: "/api/chats/",
         CHATS_MESSAGES: "/api/chats/messages/",
         BREADCRUMBS: "/api/breadcrumbs/",
-        FILTERS: "/api/date-filters",
+        DATE_FILTERS: "/api/date-filters",
       }
       // Сохраняем текущие параметры поиска для пагинации
       let currentSearchParams = {}
@@ -1115,18 +1115,19 @@
           }
 
           const datesWithInitDate = [
-            { name: "All dates", value: "all" },
+            { name: "All dates", value: "all", active: false },
             ...dates,
           ]
 
           const resultFiltersNode = datesWithInitDate.map((date) => {
-            const { name, value } = date
+            const { name, value, active } = date
             const dateButton =
               this.dateButtonNode.content.firstElementChild.cloneNode(true)
 
             dateButton.innerText = name
             dateButton.id = name
             dateButton.dataset.date = value
+            dateButton.dataset.active = active
 
             return dateButton
           })
@@ -1135,22 +1136,37 @@
         }
 
         // Выбор фильтра даты
-        selectDateFilter(dateId) {
-          this.dateButtonsContainer.childNodes.forEach((node) => {
-            if (node.id === dateId) {
-              node.dataset.active = true
+        selectDateFilter({ selectedId, filtersData }) {
+          // Обновляем currentSearchParams на основе выбранной кнопки (если selectedId передан)
+          if (selectedId) {
+            const selectedButton = Array.from(
+              this.dateButtonsContainer.childNodes
+            ).find((node) => node.id === selectedId)
 
+            if (selectedButton) {
               // если All - удаляем фильтр
-              if (node.dataset.date.toLowerCase() === "all") {
+              if (selectedButton.dataset.date.toLowerCase() === "all") {
                 delete currentSearchParams.date
-                return
+              } else {
+                currentSearchParams.date = selectedButton.dataset.date
               }
-
-              currentSearchParams.date = node.dataset.date
-              return
             }
-            node.dataset.active = false
-          })
+          }
+
+          // Обновляем состояние всех кнопок на основе active ключа из данных
+          if (Array.isArray(filtersData)) {
+            this.dateButtonsContainer.childNodes.forEach((node) => {
+              // Ищем соответствующий объект в массиве по name
+              const filterObj = filtersData.find(
+                (item) => item.name === node.id
+              )
+
+              if (filterObj) {
+                // Устанавливаем active на основе значения из объекта
+                node.dataset.active = filterObj.active
+              }
+            })
+          }
         }
       }
 
@@ -1173,7 +1189,9 @@
 
       const EmitterActions = {
         selectFirstFilterDate() {
-          dataEmitter.emit(ACTIONS.selectDateFilter, "All dates")
+          dataEmitter.emit(ACTIONS.selectDateFilter, {
+            selectedId: "All dates",
+          })
         },
       }
 
@@ -1209,7 +1227,16 @@
         renderer.renderDateFilters(data)
       }
       function selectDateFilter(data) {
-        renderer.selectDateFilter(data)
+        // Если data - это объект с selectedId и/или filtersData
+        if (data && typeof data === "object") {
+          renderer.selectDateFilter({
+            selectedId: data.selectedId || data.clickedButtonId, // поддержка старого названия
+            filtersData: data.filtersData,
+          })
+        } else {
+          // Обратная совместимость - если передан только ID
+          renderer.selectDateFilter({ selectedId: data })
+        }
       }
 
       function searchChatsByMessage(searchQuery) {
@@ -1240,29 +1267,32 @@
       }
 
       async function fetchDateFilter(filterId) {
-        const filters = await new Promise((res, rej) => {
-          setTimeout(() => {
-            res([
-              { name: "April 2025", value: new Date().getDate() },
-              { name: "April 2024", value: new Date().getDate() },
-              { name: "April 2023", value: new Date().getDate() },
-            ])
-          }, 1300)
-        })
+        // const filters = await new Promise((res, rej) => {
+        //   setTimeout(() => {
+        //     res([
+        //       { name: "April 2025", value: 5, active: false },
+        //       { name: "April 2024", value: 4, active: false },
+        //       { name: "April 2023", value: 3, active: true },
+        //     ])
+        //   }, 1300)
+        // })
 
-        dataEmitter.emit(ACTIONS.renderDateFilters, filters)
+        // dataEmitter.emit(ACTIONS.renderDateFilters, filters)
 
-        return filters
+        // return filters
 
         try {
-          // const response = fetch(FETCH_URLS.FILTERS)
-          // if (!response.ok) {
-          //   throw new Error("Ошибка получения фильтров")
-          // }
-          // const filters = await response.json()
-          // dataEmitter.emit(ACTIONS.renderDateFilters, filters)
+          const response = await fetch(FETCH_URLS.DATE_FILTERS)
+          if (!response.ok) {
+            throw new Error("Ошибка получения фильтров")
+          }
+          const filters = await response.json()
+          dataEmitter.emit(ACTIONS.renderDateFilters, filters)
+          return filters
         } catch (e) {
-          console.log(e)
+          console.error("fetchDateFilter error:", e)
+          renderer.dateButtonsContainer.innerText = "Ошибка получения фильтров"
+          return []
         }
       }
 
@@ -1328,7 +1358,7 @@
       // Запрос данных для sidebar
       async function fetchSidebarData(page) {
         try {
-          const response = await fetch(FETCH_URLS.FILTERS, {
+          const response = await fetch(FETCH_URLS.SIDEBAR_FILTERS, {
             credentials: "include",
           })
 
@@ -1403,7 +1433,6 @@
           console.error(error)
         }
       }
-
       // Запрос сообщений для чата
       async function fetchChatMessages(chatId) {
         try {
@@ -1424,69 +1453,101 @@
         }
       }
 
-      // ВЕШАЕМ ОБРАБОТЧИКИ СОБЫТИЙ
-      document.addEventListener("click", (e) => {
-        // Обработка нажатия на элемент пагинации
-        if (e.target.classList.contains("pagination__item")) {
-          const pageNumber = e.target.dataset.page
-          fetchMainData(Number(pageNumber))
-          return
+      class ClickDelegationEvent {
+        constructor(events) {
+          document.addEventListener("click", (e) => {
+            for (const eventName in events) {
+              const event = events[eventName]
+              if (e.target.classList.contains(event.selector)) {
+                if (typeof event.cb !== "function") {
+                  throw new Error("Event callback is not a function!")
+                }
+                event.cb(e)
+                break // Выходим из цикла после первого совпадения
+              }
+            }
+          })
         }
+      }
 
-        // Вызываем подгрузку сообщений для чата
-        if (e.target.classList.contains("table__uid")) {
-          const chatId = e.target.dataset.chatid
+      // Вешаем обработчики событий на click
+      new ClickDelegationEvent({
+        clickToChatRow: {
+          selector: "table__uid",
+          cb: (e) => {
+            const chatId = e.target.dataset.chatid
 
-          // const data = [
-          //   { role: "user", content: "Здравствуйте!" },
-          //   { role: "assistant", content: "Добрый день!" },
-          //   { role: "user", content: "Иди нахуй" },
-          // ]
+            // const data = [
+            //   { role: "user", content: "Здравствуйте!" },
+            //   { role: "assistant", content: "Добрый день!" },
+            //   { role: "user", content: "Иди нахуй" },
+            // ]
 
-          fetchChatMessages(chatId).then((data) => {
-            dataEmitter.emit(ACTIONS.openChatAndInsertMessage, {
-              chatId,
-              messages: data,
+            fetchChatMessages(chatId).then((data) => {
+              dataEmitter.emit(ACTIONS.openChatAndInsertMessage, {
+                chatId,
+                messages: data,
+              })
             })
-          })
-        }
+          },
+        },
 
-        // Обработка нажатия на кнопку фильтра по дате
-        if (e.target.classList.contains("date__filter")) {
-          const dateBtnId = e.target.id
+        clickToPaginateButton: {
+          selector: "pagination__item",
+          cb: (e) => {
+            // Обработка нажатия на элемент пагинации
+            const pageNumber = e.target.dataset.page
+            fetchMainData(Number(pageNumber))
+            return
+          },
+        },
 
-          Promise.all([fetchDateFilter(), fetchMainData()]).then(() => {
-            dataEmitter.emit(ACTIONS.selectDateFilter, dateBtnId)
-          })
-        }
+        clickToDateFilter: {
+          selector: "date__filter",
+          cb: (e) => {
+            const dateBtnId = e.target.id
 
-        // Обработка поиска одним кликом: собираем оба поля
-        if (e.target.classList.contains("main__search-btn")) {
-          const messageInput = document.getElementById("search-messages-input")
-          const emailInput = document.getElementById("search-email-input")
-          const messageValue = (messageInput?.value || "").trim()
-          const emailValue = (emailInput?.value || "").trim()
+            fetchDateFilter().then((filtersData) => {
+              dataEmitter.emit(ACTIONS.selectDateFilter, {
+                selectedId: dateBtnId,
+                filtersData: filtersData,
+              })
+              fetchMainData()
+            })
+          },
+        },
 
-          if (messageValue) {
-            currentSearchParams = {
-              ...currentSearchParams,
-              message: messageValue,
+        clickToSearchButton: {
+          selector: "main__search-btn",
+          cb: (e) => {
+            const messageInput = document.getElementById(
+              "search-messages-input"
+            )
+            const emailInput = document.getElementById("search-email-input")
+            const messageValue = (messageInput?.value || "").trim()
+            const emailValue = (emailInput?.value || "").trim()
+
+            if (messageValue) {
+              currentSearchParams = {
+                ...currentSearchParams,
+                message: messageValue,
+              }
+            } else {
+              delete currentSearchParams.message
             }
-          } else {
-            delete currentSearchParams.message
-          }
 
-          if (emailValue) {
-            currentSearchParams = {
-              ...currentSearchParams,
-              email: emailValue,
+            if (emailValue) {
+              currentSearchParams = {
+                ...currentSearchParams,
+                email: emailValue,
+              }
+            } else {
+              delete currentSearchParams.email
             }
-          } else {
-            delete currentSearchParams.email
-          }
 
-          fetchMainData()
-        }
+            fetchMainData()
+          },
+        },
       })
 
       // Инициализируем данные при загрузке страницы
@@ -1494,8 +1555,14 @@
         fetchMainData()
         fetchSidebarData()
         fetchBreadcrumbs()
-        fetchDateFilter().then(() => {
-          EmitterActions.selectFirstFilterDate()
+        fetchDateFilter().then((filters) => {
+          // При инициализации всегда активным будет "All dates"
+          const selectedId = "All dates"
+
+          dataEmitter.emit(ACTIONS.selectDateFilter, {
+            selectedId,
+            filtersData: filters,
+          })
         })
       }
       // Инициализируем данные
