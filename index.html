@@ -602,14 +602,8 @@
           this.#events = {}
         }
 
-        // Приватное поле для хранения событий и их обработчиков
         #events = {}
 
-        /**
-         * Подписаться на событие
-         * @param {string} event - название события
-         * @param {function} callback - функция-обработчик события
-         */
         on(event, callback) {
           if (!this.#events[event]) {
             this.#events[event] = []
@@ -617,11 +611,6 @@
           this.#events[event].push(callback)
         }
 
-        /**
-         * Отписаться от события
-         * @param {string} event - название события
-         * @param {function} [callback] - конкретный обработчик для удаления (если не указан, удаляются все)
-         */
         off(event, callback) {
           if (!this.#events[event]) return
 
@@ -638,11 +627,6 @@
           }
         }
 
-        /**
-         * Вызвать событие и передать аргументы всем подписчикам
-         * @param {string} event - название события
-         * @param {...any} args - аргументы для передачи обработчикам
-         */
         emit(event, ...args) {
           if (!this.#events[event]) return
 
@@ -655,11 +639,6 @@
           })
         }
 
-        /**
-         * Подписаться на событие один раз (автоматически отписывается после первого вызова)
-         * @param {string} event - название события
-         * @param {function} callback - функция-обработчик события
-         */
         once(event, callback) {
           const onceWrapper = (...args) => {
             callback(...args)
@@ -668,11 +647,6 @@
           this.on(event, onceWrapper)
         }
 
-        /**
-         * Получить количество подписчиков на событие
-         * @param {string} event - название события
-         * @returns {number} количество подписчиков
-         */
         listenerCount(event) {
           return this.#events[event] ? this.#events[event].length : 0
         }
@@ -1410,7 +1384,7 @@
           })
           // const m = await import("./mockData.js")
           // const data = await m.getMockSidebarData()
-          
+
           if (!response.ok) {
             console.error("ошибка получения сайдбара")
           }
