@@ -1408,58 +1408,14 @@
           const response = await api.get(FETCH_URLS.SIDEBAR_FILTERS, {
             credentials: "include",
           })
-
+          // const m = await import("./mockData.js")
+          // const data = await m.getMockSidebarData()
+          
           if (!response.ok) {
             console.error("ошибка получения сайдбара")
           }
           const data = await response.json()
 
-          // const sidebarData = [
-          //   {
-          //     sectionTitle: "Authentication and Authorization",
-          //     list: [
-          //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-          //       {
-          //         itemTitle: "Anonymous usage limits",
-          //         titleLink: "#",
-          //         addLink: "#",
-          //       },
-          //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-          //       {
-          //         itemTitle: "Anonymous usage limits",
-          //         titleLink: "#",
-          //         addLink: "#",
-          //       },
-          //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-          //       {
-          //         itemTitle: "Anonymous usage limits",
-          //         titleLink: "#",
-          //         addLink: "#",
-          //       },
-          //       { itemTitle: "Groups", titleLink: "#", addLink: "#" },
-          //     ],
-          //   },
-          //   {
-          //     sectionTitle: "LLM Integration",
-          //     list: [{ itemTitle: "Messages", titleLink: "#", addLink: "#" }],
-          //   },
-          //   {
-          //     sectionTitle: "Payments",
-          //     list: [
-          //       { itemTitle: "Billing plans", titleLink: "#", addLink: "#" },
-          //     ],
-          //   },
-          //   {
-          //     sectionTitle: "Python Social Auth",
-          //     list: [{ itemTitle: "Users", titleLink: "#", addLink: "#" }],
-          //   },
-          // ]
-
-          // const data = await new Promise((resolve) => {
-          //   setTimeout(() => {
-          //     resolve(sidebarData)
-          //   }, 1000)
-          // })
           dataEmitter.emit(ACTIONS.loadedSidebarData, data)
         } catch (error) {
           console.error("fetchSidebarData error:", error)
