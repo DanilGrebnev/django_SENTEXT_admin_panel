@@ -77,6 +77,14 @@ export const mockChatMessages = [
   { role: "assistant", content: "Конечно! Вот интересный факт..." },
 ]
 
+export function getMockChatMessages() {
+  return [
+    { role: "user", content: "Здравствуйте!" },
+    { role: "assistant", content: "Добрый день!" },
+    { role: "user", content: "Иди нахуй" },
+  ]
+}
+
 export async function getMockDateFilters() {
   return new Promise((resolve) => {
     setTimeout(() => {
