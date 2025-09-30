@@ -526,19 +526,77 @@
 
     <script>
       const FETCH_URLS = {
-        SIDEBAR_FILTERS: "/api/filters/",
-        CHATS: "/api/chats/",
-        CHATS_MESSAGES: "/api/chats/messages/",
-        BREADCRUMBS: "/api/breadcrumbs/",
-        DATE_FILTERS: "/api/date-filters",
+        SIDEBAR_FILTERS: "filters/",
+        CHATS: "chats/",
+        CHATS_MESSAGES: "chats/messages/",
+        BREADCRUMBS: "breadcrumbs/",
+        DATE_FILTERS: "date-filters",
       }
+
+      class Api {
+        prefixUrl = ""
+
+        constructor(args) {
+          if (!args) return
+          if (args.prefixUrl) {
+            this.prefixUrl = args.prefixUrl
+          }
+        }
+        #addPrefix(url) {
+          if (this.prefixUrl) {
+            return this.prefixUrl + "/" + url
+          }
+
+          return url
+        }
+        #createUrlWithParams(url, params) {
+          if (!url) {
+            throw new Error("Url is undefined!")
+          }
+
+          let resultUrl = url
+
+          if (params?.queryParams && Object.keys(params?.queryParams).length) {
+            return this.#addPrefix(
+              url + `?${new URLSearchParams(params?.queryParams)}`
+            )
+          }
+
+          return this.#addPrefix(url)
+        }
+
+        get(url, params) {
+          return fetch(this.#createUrlWithParams(url, params), {
+            method: "GET",
+            ...params,
+          })
+        }
+
+        post(url, params) {
+          return fetch(this.#createUrlWithParams(url, params), {
+            method: "POST",
+            ...params,
+          })
+        }
+        put(url, params) {
+          return fetch(this.#createUrlWithParams(url, params), {
+            method: "PUT",
+            ...params,
+          })
+        }
+        delete(url, params) {
+          return fetch(this.#createUrlWithParams(url, params), {
+            ...params,
+            method: "DELETE",
+          })
+        }
+      }
+
+      const api = new Api({ prefixUrl: "api" })
+
       // Сохраняем текущие параметры поиска для пагинации
       let currentSearchParams = {}
 
-      /**
-       * EventEmitter - класс для работы с событиями
-       * Позволяет подписываться на события, отписываться и вызывать их
-       */
       class EventEmitter {
         constructor() {
           this.#events = {}
@@ -1114,14 +1172,7 @@
             throw new Error("Dates is not array!")
           }
 
-          // Проверяем, есть ли уже "All dates" в данных
-          const hasAllDates = dates.some((date) => date.name === "All dates")
-
-          const datesWithInitDate = hasAllDates
-            ? dates
-            : [{ name: "All dates", value: "all", active: false }, ...dates]
-
-          const resultFiltersNode = datesWithInitDate.map((date) => {
+          const resultFiltersNode = dates.map((date) => {
             const { name, value, active } = date
             const dateButton =
               this.dateButtonNode.content.firstElementChild.cloneNode(true)
@@ -1194,7 +1245,7 @@
 
       // Объявляем обработчики событий
       const ACTIONS = {
-        loadedMainData: "mainData:loaded",
+        updateChatList: "chatList:update",
         loadedSidebarData: "sideBar:loaded",
         loadedBreadcrumbs: "breadcrumbs:loaded",
         renderPagination: "setPaginationData",
@@ -1215,7 +1266,7 @@
       }
 
       // ==== Регистрируем обработчик события ====
-      dataEmitter.on(ACTIONS.loadedMainData, renderMainData)
+      dataEmitter.on(ACTIONS.updateChatList, renderMainData)
       dataEmitter.on(ACTIONS.loadedSidebarData, renderSidebarData)
       dataEmitter.on(ACTIONS.loadedBreadcrumbs, renderBreadcrumbs)
       dataEmitter.on(ACTIONS.renderPagination, renderPagination)
@@ -1285,105 +1336,76 @@
         renderer.openChatById(chatId, messages)
       }
 
-      async function fetchDateFilter(filterId) {
-        // const filters = await new Promise((res, rej) => {
-        //   setTimeout(() => {
-        //     res([
-        //       { name: "April 2025", value: 5, active: false },
-        //       { name: "April 2024", value: 4, active: false },
-        //       { name: "April 2023", value: 3, active: true },
-        //     ])
-        //   }, 1300)
-        // })
-
-        // dataEmitter.emit(ACTIONS.renderDateFilters, filters)
-
-        // return filters
-
+      async function deleteSelectedChats() {
         try {
-          const response = await fetch(FETCH_URLS.DATE_FILTERS)
-          if (!response.ok) {
-            throw new Error("Ошибка получения фильтров")
+          const checkedBoxes = document.querySelectorAll(
+            ".table__checkbox--row:checked"
+          )
+          const chatIds = Array.from(checkedBoxes).map(
+            (cb) => cb.closest("tr").querySelector(".table__uid").dataset.chatid
+          )
+
+          const deleteResponse = await api.delete(FETCH_URLS.CHATS, {
+            body: JSON.stringify(chatIds),
+          })
+
+          if (!deleteResponse.ok) {
+            throw new Error("Ошибка удаления чатов")
           }
-          const filters = await response.json()
-          dataEmitter.emit(ACTIONS.renderDateFilters, filters)
-          return filters
-        } catch (e) {
-          console.error("fetchDateFilter error:", e)
 
-          // При ошибке создаем только фильтр "All dates" как активный
-          const fallbackFilters = [
-            { name: "All dates", value: "all", active: true },
-          ]
-
-          dataEmitter.emit(ACTIONS.renderDateFilters, fallbackFilters)
-          return fallbackFilters
+          await fetchMainData(1)
+        } catch (error) {
+          console.error("deleteSelectedChats error:", error)
         }
       }
 
       // Запрашиваем данные с сервера и дёргаем емиттер
       async function fetchMainData(page = 1) {
         try {
-          const urlSearchParams = new URLSearchParams({
-            ...currentSearchParams,
-            page,
-          })
-          const searchParamsString = urlSearchParams.toString()
-
-          let url = FETCH_URLS.CHATS
-
-          if (searchParamsString) {
-            url += `?${searchParamsString}`
-          }
-
-          const response = await fetch(url, {
+          const response = await api.get(FETCH_URLS.CHATS, {
+            queryParams: { ...currentSearchParams, page },
             credentials: "include",
           })
+          // const mockModule = await import("./mockData.js")
+          // const data = await mockModule.getMockMainPage()
 
           if (!response.ok) return
           const data = await response.json()
 
-          // const mainPageData = {
-          //   pagesAmount: 29,
-          //   activePage: page,
-          //   data: [
-          //     {
-          //       uid: "c7d229bd-26c4-4757-9edb-cbe5f7765ca4",
-          //       email: "da000shi@gmail.com",
-          //       session: "New chat",
-          //     },
-          //     {
-          //       uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-          //       email: "user@example.com",
-          //       session: "Previous chat",
-          //     },
-          //     {
-          //       uid: "f9e8d7c6-b5a4-3210-9876-543210fedcba",
-          //       email: "admin@test.com",
-          //       session: "Support chat",
-          //     },
-          //   ],
-          // }
-
-          // const data = await new Promise((resolve) => {
-          //   setTimeout(() => {
-          //     resolve(mainPageData)
-          //   }, 500)
-          // })
-
           const { data: pageData, ...navigationData } = data
 
-          // Эмитим событиями перерисовки страницы и обновлеем пагинацию
-          dataEmitter.emit(ACTIONS.loadedMainData, pageData)
+          // Эмитим событиями перерисовки страницы и обновляем пагинацию
+          dataEmitter.emit(ACTIONS.updateChatList, pageData)
           dataEmitter.emit(ACTIONS.renderPagination, navigationData)
         } catch (error) {
           console.error("fetchMainData error:", error)
         }
       }
+
+      async function fetchDateFilter(filterId) {
+        try {
+          // const m = await import("./mockData.js")
+          // let data = await m.getMockDateFilters()
+
+          const response = await api.get(FETCH_URLS.DATE_FILTERS)
+          if (!response.ok) {
+            throw new Error("Ошибка получения фильтров по дате")
+          }
+          data = await response.json()
+
+          dataEmitter.emit(ACTIONS.renderDateFilters, data)
+          return data
+        } catch (e) {
+          console.error("fetchDateFilter error:", e)
+          dataEmitter.emit(ACTIONS.renderDateFilters, [])
+          return []
+        }
+      }
+
       // Запрос данных для sidebar
       async function fetchSidebarData(page) {
         try {
-          const response = await fetch(FETCH_URLS.SIDEBAR_FILTERS, {
+          const response = await api.get(FETCH_URLS.SIDEBAR_FILTERS, {
             credentials: "include",
           })
 
@@ -1446,7 +1468,7 @@
       // Запрос хлебных крошек
       async function fetchBreadcrumbs() {
         try {
-          const response = await fetch(FETCH_URLS.BREADCRUMBS, {
+          const response = await api.get(FETCH_URLS.BREADCRUMBS, {
             credentials: "include",
           })
           if (!response.ok) {
@@ -1461,15 +1483,15 @@
       // Запрос сообщений для чата
       async function fetchChatMessages(chatId) {
         try {
-          const response = await fetch(
-            FETCH_URLS.CHATS_MESSAGES + `?chatId=${chatId}`,
-            {
-              credentials: "include",
-            }
-          )
+          const response = await api.get(FETCH_URLS.CHATS_MESSAGES, {
+            queryParams: { chatId },
+            credentials: "include",
+          })
 
           if (!response.ok) {
-            console.error("ошибка получения сообщения")
+            console.error(
+              `Ошибка получения списка сообщений для чата ${chatId}`
+            )
           }
           const data = await response.json()
           return data
@@ -1482,14 +1504,10 @@
       new ClickDelegationEvent({
         clickToChatRow: {
           selector: "table__uid",
-          cb: (e) => {
+          cb: async (e) => {
             const chatId = e.target.dataset.chatid
-
-            // const data = [
-            //   { role: "user", content: "Здравствуйте!" },
-            //   { role: "assistant", content: "Добрый день!" },
-            //   { role: "user", content: "Иди нахуй" },
-            // ]
+            // const m = await import("./mockData.js")
+            // const data = m.getMockChatMessages()
 
             fetchChatMessages(chatId).then((data) => {
               dataEmitter.emit(ACTIONS.openChatAndInsertMessage, {
@@ -1514,14 +1532,14 @@
           selector: "date__filter",
           cb: (e) => {
             const dateBtnId = e.target.id
+            const selectedButton = e.target
+            if (selectedButton.dataset.date.toLowerCase() === "all") {
+              delete currentSearchParams.date
+            } else {
+              currentSearchParams.date = selectedButton.dataset.date
+            }
 
-            fetchDateFilter().then((filtersData) => {
-              dataEmitter.emit(ACTIONS.selectDateFilter, {
-                selectedId: dateBtnId,
-                filtersData: filtersData,
-              })
-              fetchMainData()
-            })
+            fetchMainData()
           },
         },
 
@@ -1556,6 +1574,13 @@
             fetchMainData()
           },
         },
+
+        clickToActionButton: {
+          selector: "main__action-btn",
+          cb: (e) => {
+            deleteSelectedChats()
+          },
+        },
       })
 
       // Инициализируем данные при загрузке страницы
@@ -1564,13 +1589,15 @@
         fetchSidebarData()
         fetchBreadcrumbs()
         fetchDateFilter().then((filters) => {
-          // При инициализации всегда активным будет "All dates"
-          const selectedId = "All dates"
+          // При инициализации выбираем активный фильтр из данных сервера
+          const activeFilter = filters.find((f) => f.active)
 
-          dataEmitter.emit(ACTIONS.selectDateFilter, {
-            selectedId,
-            filtersData: filters,
-          })
+          if (activeFilter) {
+            dataEmitter.emit(ACTIONS.selectDateFilter, {
+              selectedId: activeFilter.name,
+              filtersData: filters,
+            })
+          }
         })
       }
       // Инициализируем данные

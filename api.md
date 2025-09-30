@@ -40,20 +40,22 @@
 
 ## 2. GET_CHATS_URL - Получение списка чатов с пагинацией и поиском
 
-**Endpoint:** `GET /api/chats/?page={page}&message={message}&email={email}`
+**Endpoint:** `GET /api/chats/?page={page}&message={message}&email={email}&date={date}`
 
 **Parameters:**
 
 - `page` (int) - номер страницы для пагинации
 - `message` (string, optional) - поиск по содержимому сообщений в чатах
 - `email` (string, optional) - поиск по email пользователей
+- `date` (string, optional) - фильтрация по дате (значение из фильтров дат)
 
 **Примеры запросов:**
 
 - `GET /api/chats/?page=1` - получить первую страницу всех чатов
 - `GET /api/chats/?page=1&message=hello` - поиск чатов содержащих "hello" в сообщениях
 - `GET /api/chats/?page=1&email=admin@test.com` - поиск чатов пользователя с email "admin@test.com"
-- `GET /api/chats/?page=1&message=hello&email=user@example.com` - комбинированный поиск
+- `GET /api/chats/?page=1&date=April+2024` - фильтрация чатов по дате "April 2024"
+- `GET /api/chats/?page=1&message=hello&email=user@example.com&date=April+2024` - комбинированный поиск с фильтром по дате
 
 **Response format:**
 
@@ -169,10 +171,33 @@
 
 - `name` (string) - отображаемое название фильтра
 - `value` (number) - числовое значение фильтра для передачи в других API запросах
-- `active` (boolean) - флаг для визуального состояния кнопки (подсветка)
+- `active` (boolean) - флаг для визуального состояния кнопки (подсветка) и определения активного фильтра при инициализации
+
+## 6. DELETE_CHATS_URL - Удаление выбранных чатов
+
+**Endpoint:** `DELETE /api/chats/`
+
+**Описание:** Удаляет несколько чатов по их ID. Принимает массив ID чатов в теле запроса.
+
+**Parameters:**
+
+- нет query параметров
+
+**Request Body:**
+
+```json
+["c7d229bd-26c4-4757-9edb-cbe5f7765ca4", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+```
+
+**Response:**
+
+- `200` - успешное удаление
+- `400` - некорректные данные в запросе
+- `404` - один или несколько чатов не найдены
+- `500` - внутренняя ошибка сервера
 
 **Особенности:**
 
-- Автоматически добавляется фильтр `{ name: "All dates", value: "all", active: false }`
-- При инициализации страницы всегда выбирается "All dates" независимо от `active` в данных
-- Поле `active` влияет только на визуальное отображение кнопок
+- Принимает массив UUID чатов в JSON формате
+- После успешного удаления фронтенд автоматически перезагружает список чатов с первой страницы
+- Если удаление не удалось, выводится ошибка в консоль
