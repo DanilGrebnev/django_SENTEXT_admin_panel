@@ -1114,10 +1114,12 @@
             throw new Error("Dates is not array!")
           }
 
-          const datesWithInitDate = [
-            { name: "All dates", value: "all", active: false },
-            ...dates,
-          ]
+          // Проверяем, есть ли уже "All dates" в данных
+          const hasAllDates = dates.some((date) => date.name === "All dates")
+
+          const datesWithInitDate = hasAllDates
+            ? dates
+            : [{ name: "All dates", value: "all", active: false }, ...dates]
 
           const resultFiltersNode = datesWithInitDate.map((date) => {
             const { name, value, active } = date
@@ -1167,6 +1169,23 @@
               }
             })
           }
+        }
+      }
+
+      class ClickDelegationEvent {
+        constructor(events) {
+          document.addEventListener("click", (e) => {
+            for (const eventName in events) {
+              const event = events[eventName]
+              if (e.target.classList.contains(event.selector)) {
+                if (typeof event.cb !== "function") {
+                  throw new Error("Event callback is not a function!")
+                }
+                event.cb(e)
+                break // Выходим из цикла после первого совпадения
+              }
+            }
+          })
         }
       }
 
@@ -1291,8 +1310,14 @@
           return filters
         } catch (e) {
           console.error("fetchDateFilter error:", e)
-          renderer.dateButtonsContainer.innerText = "Ошибка получения фильтров"
-          return []
+
+          // При ошибке создаем только фильтр "All dates" как активный
+          const fallbackFilters = [
+            { name: "All dates", value: "all", active: true },
+          ]
+
+          dataEmitter.emit(ACTIONS.renderDateFilters, fallbackFilters)
+          return fallbackFilters
         }
       }
 
@@ -1450,23 +1475,6 @@
           return data
         } catch (error) {
           console.error("fetchChatMessages error:", error)
-        }
-      }
-
-      class ClickDelegationEvent {
-        constructor(events) {
-          document.addEventListener("click", (e) => {
-            for (const eventName in events) {
-              const event = events[eventName]
-              if (e.target.classList.contains(event.selector)) {
-                if (typeof event.cb !== "function") {
-                  throw new Error("Event callback is not a function!")
-                }
-                event.cb(e)
-                break // Выходим из цикла после первого совпадения
-              }
-            }
-          })
         }
       }
 
