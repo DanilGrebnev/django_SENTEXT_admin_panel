@@ -1,12 +1,27 @@
-# API Endpoints для Django Admin Panel
+# API Документация
 
-## 1. GET_FILTERS_URL - Получение фильтров для сайдбара
+Документация для всех API endpoints, используемых в Django Admin Panel.
 
-**Endpoint:** `GET /api/filters/`
+## 1. GET /api/filters/
 
-**Описание:** Возвращает структуру фильтров для левого сайдбара
+**Описание:** Возвращает структурированные данные для отображения левой навигационной панели с разделами и ссылками.
 
-**Response format:**
+**Query параметры:** нет
+
+**Schema ответа:**
+
+```typescript
+Array<{
+  sectionTitle: string
+  list: Array<{
+    itemTitle: string
+    titleLink: string
+    addLink: string
+  }>
+}>
+```
+
+**Response:**
 
 ```json
 [
@@ -38,26 +53,45 @@
 ]
 ```
 
-## 2. GET_CHATS_URL - Получение списка чатов с пагинацией и поиском
+## 2. GET /api/chats/
 
-**Endpoint:** `GET /api/chats/?page={page}&message={message}&email={email}&date={date}`
+**Описание:** Основной endpoint для получения списка чатов с пагинацией, поиском и фильтрами. Возвращает данные чатов, информацию о пагинации и актуальные фильтры по датам в одном запросе.
 
-**Parameters:**
+**Query параметры:**
 
-- `page` (int) - номер страницы для пагинации
+- `page` (int, optional) - номер страницы для пагинации (по умолчанию 1)
 - `message` (string, optional) - поиск по содержимому сообщений в чатах
 - `email` (string, optional) - поиск по email пользователей
 - `date` (string, optional) - фильтрация по дате (значение из фильтров дат)
 
 **Примеры запросов:**
 
-- `GET /api/chats/?page=1` - получить первую страницу всех чатов
-- `GET /api/chats/?page=1&message=hello` - поиск чатов содержащих "hello" в сообщениях
-- `GET /api/chats/?page=1&email=admin@test.com` - поиск чатов пользователя с email "admin@test.com"
-- `GET /api/chats/?page=1&date=April+2024` - фильтрация чатов по дате "April 2024"
-- `GET /api/chats/?page=1&message=hello&email=user@example.com&date=April+2024` - комбинированный поиск с фильтром по дате
+- `GET /api/chats/?page=1`
+- `GET /api/chats/?page=1&message=hello`
+- `GET /api/chats/?page=1&email=admin@test.com`
+- `GET /api/chats/?page=1&date=april_2024`
+- `GET /api/chats/?page=1&message=hello&email=user@example.com&date=april_2024`
 
-**Response format:**
+**Schema ответа:**
+
+```typescript
+{
+  pagesAmount: number,
+  activePage: number,
+  data: Array<{
+    uid: string,
+    email: string,
+    session: string
+  }>,
+  dateFilters: Array<{
+    name: string,
+    value: string,
+    active: boolean
+  }>
+}
+```
+
+**Response:**
 
 ```json
 {
@@ -74,19 +108,64 @@
       "email": "user@example.com",
       "session": "Previous chat"
     }
+  ],
+  "dateFilters": [
+    {
+      "name": "All dates",
+      "value": "all",
+      "active": false
+    },
+    {
+      "name": "April 2024",
+      "value": "april_2024",
+      "active": true
+    }
   ]
 }
 ```
 
-## 3. GET_CHATS_MESSAGES_URL - Получение сообщений конкретного чата
+**Поля ответа:**
 
-**Endpoint:** `GET /api/chats/messages/?chatId={chatId}`
+- `pagesAmount` (int) - общее количество страниц
+- `activePage` (int) - текущая активная страница
+- `data` (array) - массив объектов чатов
+- `dateFilters` (array) - доступные фильтры по датам с флагом активности
 
-**Parameters:**
+**Логика работы фильтров по датам:**
 
-- `chatId` (string) - UUID чата для получения сообщений
+Поле `dateFilters` содержит массив всех доступных фильтров с их состоянием:
 
-**Response format:**
+- `name` (string) - отображаемое название фильтра (например, "April 2024", "All dates")
+- `value` (string) - значение фильтра, которое передается в параметре `date` при запросе
+- `active` (boolean) - флаг активности фильтра:
+  - `true` - этот фильтр сейчас применен (должен быть подсвечен в UI)
+  - `false` - фильтр доступен, но не активен
+
+**Правила установки `active`:**
+
+- Если передан параметр `date=april_2024`, то `active: true` у фильтра с `value: "april_2024"`
+- Если параметр `date` не передан или `date=all`, то `active: true` у фильтра "All dates"
+- У всех остальных фильтров должно быть `active: false`
+- Одновременно может быть активен только один фильтр
+
+## 3. GET /api/chats/messages/
+
+**Описание:** Возвращает список сообщений для конкретного чата.
+
+**Query параметры:**
+
+- `chatId` (string, required) - UUID чата для получения сообщений
+
+**Schema ответа:**
+
+```typescript
+Array<{
+  role: "user" | "assistant"
+  content: string
+}>
+```
+
+**Response:**
 
 ```json
 [
@@ -96,36 +175,27 @@
   },
   {
     "role": "assistant",
-    "content": "Добрый день!"
-  },
-  {
-    "role": "user",
-    "content": "Расскажи что-нибудь"
+    "content": "Добрый день! Как дела?"
   }
 ]
 ```
 
-## Обработка ошибок
+## 4. GET /api/breadcrumbs/
 
-Все endpoints должны возвращать соответствующие HTTP статус коды:
+**Описание:** Возвращает массив элементов для отображения навигационных хлебных крошек в верхней части страницы.
 
-- `200` - успешный запрос
-- `404` - данные не найдены
-- `500` - внутренняя ошибка сервера
+**Query параметры:** нет
 
-При ошибках фронтенд логирует в консоль, но продолжает работу.
+**Schema ответа:**
 
-## 4. GET_BREADCRUMBS_URL - Получение хлебных крошек
+```typescript
+Array<{
+  text: string
+  link: string
+}>
+```
 
-**Endpoint:** `GET /api/breadcrumbs/`
-
-**Описание:** Возвращает массив элементов хлебных крошек для верхней панели навигации.
-
-**Parameters:**
-
-- нет
-
-**Response format:**
+**Response:**
 
 ```json
 [
@@ -135,62 +205,19 @@
 ]
 ```
 
-## 5. GET_DATE_FILTERS_URL - Получение фильтров по дате
+## 5. DELETE /api/chats/
 
-**Endpoint:** `GET /api/date-filters`
+**Описание:** Удаляет несколько чатов по их ID. Принимает массив UUID чатов для удаления.
 
-**Описание:** Возвращает список доступных фильтров по дате для основной страницы. Автоматически добавляется фильтр "All dates" для сброса фильтрации. При инициализации всегда активен фильтр "All dates".
+**Query параметры:** нет
 
-**Parameters:**
+**Body параметры:**
 
-- нет
+**Schema body:**
 
-**Response format:**
-
-```json
-[
-  {
-    "name": "April 2025",
-    "value": 5,
-    "active": false
-  },
-  {
-    "name": "April 2024",
-    "value": 4,
-    "active": false
-  },
-  {
-    "name": "April 2023",
-    "value": 3,
-    "active": true
-  }
-]
+```typescript
+string[]
 ```
-
-**Поля ответа:**
-
-- `name` (string) - отображаемое название фильтра
-- `value` (number) - числовое значение фильтра для передачи в других API запросах
-- `active` (boolean) - флаг для визуального состояния кнопки (подсветка) и определения активного фильтра при инициализации
-
-**Особенности:**
-
-- Все фильтры, включая "All dates", приходят с сервера - клиент ничего не добавляет автоматически
-- При инициализации выбирается фильтр с `active: true` из данных сервера
-- Поле `active` определяет, какая кнопка будет подсвечена при загрузке
-- При клике на фильтр его `value` передается в параметре `date` для запроса чатов
-
-## 6. DELETE_CHATS_URL - Удаление выбранных чатов
-
-**Endpoint:** `DELETE /api/chats/`
-
-**Описание:** Удаляет несколько чатов по их ID. Принимает массив ID чатов в теле запроса.
-
-**Parameters:**
-
-- нет query параметров
-
-**Request Body:**
 
 ```json
 ["c7d229bd-26c4-4757-9edb-cbe5f7765ca4", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
@@ -202,9 +229,3 @@
 - `400` - некорректные данные в запросе
 - `404` - один или несколько чатов не найдены
 - `500` - внутренняя ошибка сервера
-
-**Особенности:**
-
-- Принимает массив UUID чатов в JSON формате
-- После успешного удаления фронтенд автоматически перезагружает список чатов с первой страницы
-- Если удаление не удалось, выводится ошибка в консоль

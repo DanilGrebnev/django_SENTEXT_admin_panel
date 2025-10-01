@@ -530,7 +530,6 @@
         CHATS: "chats/",
         CHATS_MESSAGES: "chats/messages/",
         BREADCRUMBS: "breadcrumbs/",
-        DATE_FILTERS: "date-filters",
       }
 
       class Api {
@@ -1346,33 +1345,18 @@
           if (!response.ok) return
           const data = await response.json()
 
-          const { data: pageData, ...navigationData } = data
+          const { data: pageData, dateFilters, ...navigationData } = data
 
           // Эмитим событиями перерисовки страницы и обновляем пагинацию
           dataEmitter.emit(ACTIONS.updateChatList, pageData)
           dataEmitter.emit(ACTIONS.renderPagination, navigationData)
+
+          // Отрисовываем фильтры по дате, если они есть
+          if (dateFilters) {
+            dataEmitter.emit(ACTIONS.renderDateFilters, dateFilters)
+          }
         } catch (error) {
           console.error("fetchMainData error:", error)
-        }
-      }
-
-      async function fetchDateFilter(filterId) {
-        try {
-          // const m = await import("./mockData.js")
-          // let data = await m.getMockDateFilters()
-
-          const response = await api.get(FETCH_URLS.DATE_FILTERS)
-          if (!response.ok) {
-            throw new Error("Ошибка получения фильтров по дате")
-          }
-          data = await response.json()
-
-          dataEmitter.emit(ACTIONS.renderDateFilters, data)
-          return data
-        } catch (e) {
-          console.error("fetchDateFilter error:", e)
-          dataEmitter.emit(ACTIONS.renderDateFilters, [])
-          return []
         }
       }
 
@@ -1486,7 +1470,6 @@
             }
 
             fetchMainData()
-            fetchDateFilter() // Обновляем состояние фильтров
           },
         },
 
@@ -1535,17 +1518,6 @@
         fetchMainData()
         fetchSidebarData()
         fetchBreadcrumbs()
-        fetchDateFilter().then((filters) => {
-          // При инициализации выбираем активный фильтр из данных сервера
-          const activeFilter = filters.find((f) => f.active)
-
-          if (activeFilter) {
-            dataEmitter.emit(ACTIONS.selectDateFilter, {
-              selectedId: activeFilter.name,
-              filtersData: filters,
-            })
-          }
-        })
       }
       // Инициализируем данные
       init()

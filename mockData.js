@@ -20,6 +20,12 @@ export const getMockMainPage = (timeout = 500) => {
         session: "Support chat",
       },
     ],
+    dateFilters: [
+      { name: "All dates", value: "all", active: true },
+      { name: "April 2024", value: "april_2024", active: false },
+      { name: "March 2024", value: "march_2024", active: false },
+      { name: "February 2024", value: "february_2024", active: false },
+    ],
   }
 
   return new Promise((res) => {
